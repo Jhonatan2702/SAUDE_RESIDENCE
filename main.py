@@ -11,15 +11,16 @@ import webbrowser
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
-HOST, PORT = "127.0.0.1", 8765
-URL = f"http://{HOST}:{PORT}/"
+BIND_HOST, PORT = "0.0.0.0", 8765
+LOCAL_HOST = "127.0.0.1"
+URL = f"http://{LOCAL_HOST}:{PORT}/"
 LOGO = BASE / "tst_gestao" / "static" / "logo.png"
 
 
 def porta_em_uso() -> bool:
     with socket.socket() as s:
         s.settimeout(0.5)
-        return s.connect_ex((HOST, PORT)) == 0
+        return s.connect_ex((LOCAL_HOST, PORT)) == 0
 
 
 def abrir_janela() -> None:
@@ -52,7 +53,7 @@ def main() -> None:
 
     from tst_gestao.app import create_app
 
-    servidor = make_server(HOST, PORT, create_app(), threaded=True)
+    servidor = make_server(BIND_HOST, PORT, create_app(), threaded=True)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()
 
     import pystray

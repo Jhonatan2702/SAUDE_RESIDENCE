@@ -10,6 +10,7 @@ Dê duplo clique em **`install.bat`**: ele localiza (ou instala via winget) o Py
 - O ícone aparece na bandeja do Windows (clique duplo = abrir, botão direito = Sair).
 - Primeiro acesso: `admin` / `admin` (a troca de senha é obrigatória).
 - Para recriar os atalhos: `.venv\Scripts\python.exe criar_atalhos.py`.
+- **Acesso pela rede local:** inicie o TST-GESTÃO no computador que hospeda os dados. Nesse computador, execute `ipconfig` e anote o endereço IPv4 da rede local. Nos outros dispositivos conectados à mesma rede, acesse `http://ENDEREÇO-IPv4:8765` (por exemplo, `http://192.168.1.25:8765`). Se o Windows perguntar, permita o acesso em redes privadas; caso não apareça o aviso e a conexão falhe, crie uma regra de entrada no Firewall do Windows para a porta TCP `8765`, limitada à rede privada.
 
 ## Níveis de acesso
 Consulta (visualiza) · Operador (cadastra/edita) · Gestor (exclui e gerencia listas) · Admin (tudo + usuários).
@@ -28,7 +29,7 @@ Banco em `dados\tst_gestao.db` (faça backup copiando este arquivo). Erros de in
 - **Saída:** `GET /api/v1/pacientes|terapias|movimentacao` (filtros, `limit`/`offset`) e `GET /api/v1/indicadores`.
 - **Entrada:** `POST /api/v1/pacientes|terapias|movimentacao` (objeto ou lista, upsert) e `POST /api/v1/importar/<recurso>` (.xlsx/.csv). A tela também permite importar planilhas.
 - **Webhooks:** POST JSON assinado (`X-TST-Signature: sha256=HMAC`) nos eventos `paciente.criado/atualizado`, `terapia.criada/atualizada`, `movimentacao.criada`.
-- A API escuta apenas em `127.0.0.1`. Exemplos completos na própria tela.
+- A aplicação escuta na rede local na porta `8765`. Exemplos completos na própria tela.
 
 ## Prontuário do paciente
 - Botão **Prontuário** em cada linha de *Pacientes*: ficha, **linha do tempo** (evoluções, movimentações, terapias e anexos), evoluções e anexos.

@@ -7,21 +7,38 @@
   let editId = null;
 
   const mesEl = document.getElementById('mes');
-  if (meta.filtro_mes) mesEl.classList.remove('hidden');
+  if (meta.filtro_mes) { mesEl.classList.remove('hidden'); mesEl.value = new Date().toISOString().slice(0, 7); }
 
   function valoresDe(c) {
     const src = c.valores || opcoes[c.lista] || [];
     return src.map(v => typeof v === 'string' ? {valor: v, rotulo: v} : v);
   }
 
+  // etiquetas coloridas por coluna (valor em minúsculas -> cor)
+  const ETIQUETA = {
+    situacao: {ativa: 'verde', realizada: 'verde', pendente: 'ambar', 'a confirmar': 'cinza', hospitalizado: 'roxo', 'não prorrogada': 'cinza',
+      cancelada: 'red', 'óbito': 'red', suspensa: 'cinza', encerrada: 'navy'},
+    complexidade: {'básico': '', 'intermediário': 'ambar', intensivo: 'red'},
+    evento: {'admissão': 'verde', alta: '', 'óbito': 'navy', 'internação': 'ambar', retorno: 'agua'},
+    agendado: {sim: 'verde', 'não': 'cinza'}, relatorio: {sim: 'verde', 'não': 'cinza'},
+    terapia: {fisio: '', fono: 'roxo', nutri: 'verde', to: 'ambar', psico: 'agua'},
+  };
+  const nomePac = Object.fromEntries((opcoes['@pacientes'] || []).map(o => typeof o === 'string' ? [o, o] : [o.valor, o.rotulo]));
+  const NUM = new Set(['int', 'money']);
+
   function celula(c, v) {
-    if (v == null) return '';
+    if (v == null || v === '') return '<span class="muted">—</span>';
     if (c.tipo === 'date') return fmtData(v);
+    if (c.tipo === 'month') return /^\d{4}-\d{2}$/.test(v) ? v.slice(5) + '/' + v.slice(0, 4) : esc(v);
     if (c.tipo === 'money') return 'R$ ' + Number(v).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+    const cores = ETIQUETA[c.nome];
+    if (cores) { const k = String(v).toLowerCase(); return `<span class="tag ${k in cores ? cores[k] : 'cinza'}">${esc(v)}</span>`; }
+    if (c.nome === 'codigo_paciente' && nomePac[v] && nomePac[v] !== v) return `<b>${esc(nomePac[v])}</b>`;
     return esc(v);
   }
+  const classe = n => (n === 'codigo' ? 'cod' : n === 'nome' ? 'forte' : NUM.has(rotulo[n].tipo) ? 'r' : '');
 
-  thead.innerHTML = '<tr>' + meta.colunas.map(n => `<th>${esc(rotulo[n].rotulo)}</th>`).join('') + '<th></th></tr>';
+  thead.innerHTML = '<tr>' + meta.colunas.map(n => `<th class="${NUM.has(rotulo[n].tipo) ? 'r' : ''}">${esc(rotulo[n].rotulo)}</th>`).join('') + '<th></th></tr>';
 
   async function carregar() {
     const p = new URLSearchParams({q: document.getElementById('q').value});
@@ -29,20 +46,24 @@
     const rows = await api(`/api/${ent}?${p}`);
     tbody.innerHTML = '';
     document.getElementById('vazio').classList.toggle('hidden', rows.length > 0);
+    document.getElementById('contador').textContent = rows.length.toLocaleString('pt-BR') + (rows.length === 1 ? ' registro' : ' registros');
     for (const r of rows) {
       const tr = document.createElement('tr');
-      tr.innerHTML = meta.colunas.map(n => `<td>${celula(rotulo[n], r[n])}</td>`).join('') + '<td class="r"></td>';
+      tr.innerHTML = meta.colunas.map(n => `<td class="${classe(n)}">${celula(rotulo[n], r[n])}</td>`).join('') + '<td class="r"></td>';
       const td = tr.lastChild;
-      if (podeEditar) td.append(botao('Editar', () => abrir(r)));
-      if (ent === 'pacientes') { const a = document.createElement('a'); a.className = 'btn ghost sm'; a.style.marginLeft = '4px'; a.textContent = 'Prontuário'; a.href = '/paciente/' + encodeURIComponent(r.codigo); td.prepend(a); }
-      if (podeExcluir) td.append(botao('Excluir', () => excluir(r), 'danger'));
+      if (ent === 'pacientes') {
+        const a = document.createElement('a'); a.className = 'btn ghost sm'; a.title = 'Abrir prontuário';
+        a.innerHTML = '<svg class="ic"><use href="#i-prontuario"/></svg>Prontuário'; a.href = '/paciente/' + encodeURIComponent(r.codigo); td.append(a);
+      }
+      if (podeEditar) td.append(botao('editar', 'Editar', () => abrir(r)));
+      if (podeExcluir) td.append(botao('excluir', 'Excluir', () => excluir(r), 'danger'));
       tbody.append(tr);
     }
   }
 
-  function botao(t, fn, cls = '') {
-    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost sm ' + cls; b.textContent = t; b.onclick = fn;
-    b.style.marginLeft = '4px'; return b;
+  function botao(icone, titulo, fn, cls = '') {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost sm so-ic ' + cls; b.title = titulo; b.onclick = fn;
+    b.innerHTML = `<svg class="ic"><use href="#i-${icone}"/></svg>`; return b;
   }
 
   function abrir(r) {

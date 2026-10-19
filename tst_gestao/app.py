@@ -389,7 +389,8 @@ def create_app() -> Flask:
     # ---------- API: BI ----------
     @app.get("/api/bi")
     def api_bi():
-        return jsonify(bi.dashboard(request.args.get("ref"), request.args.get("periodo", "mes")))
+        a = request.args
+        return jsonify(bi.dashboard(a.get("ref"), a.get("periodo", "mes"), a.get("ini"), a.get("fim")))
 
     # ---------- API: opções ----------
     def todas_opcoes(conn) -> dict:
@@ -552,7 +553,7 @@ def create_app() -> Flask:
             with connect() as conn:
                 novo_id = gravar(conn, ent, dados, registro_id)
         except ErroIntegridade:
-            msg = "Já existe um paciente com este código." if ent == "pacientes" else "Já existe registro para este paciente, terapia e mês."
+            msg = "Já existe um paciente com este código." if ent == "pacientes" else "Já existe registro para este paciente, terapia, profissional e mês."
             return jsonify(erro=msg), 409
         ig.notificar(WEBHOOK_EVENTO[ent][registro_id is not None], {**dados, "id": novo_id})
         return jsonify(ok=True, id=novo_id)
@@ -689,7 +690,11 @@ def create_app() -> Flask:
         if any(dados_in.get(k) in (None, "") for k in chaves):
             limpar(ent, dados_in)  # aborta com a mensagem de campo obrigatório
         filtro = " AND ".join(f"{k} = ?" for k in chaves)
-        existente = conn.execute(f'SELECT * FROM {e["tabela"]} WHERE {filtro}', [str(dados_in[k]) for k in chaves]).fetchone()
+        valores = [str(dados_in[k]) for k in chaves]
+        if ent == "terapias":  # o mesmo paciente pode ter mais de um profissional na mesma terapia/mês
+            filtro += " AND COALESCE(profissional, '') = ?"
+            valores.append(str(dados_in.get("profissional") or ""))
+        existente = conn.execute(f'SELECT * FROM {e["tabela"]} WHERE {filtro}', valores).fetchone()
         if ent == "movimentacao":
             if existente:
                 return "ignorado", existente["id"], None

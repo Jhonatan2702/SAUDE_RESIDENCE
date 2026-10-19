@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from .db import connect
 
@@ -38,9 +38,126 @@ def _taxa_mortalidade(conn, inicio: str, fim: str) -> dict:
     return {"obitos": obitos, "base": expostos, "taxa": round(obitos * 100 / expostos, 2) if expostos else 0}
 
 
-def dashboard(ref_text: str | None, periodo_motivos: str) -> dict:
+def _meses(ref: date, n: int = 8) -> list[tuple[str, str, str]]:
+    """Últimos n meses até o mês de referência: (AAAA-MM, primeiro dia, último dia)."""
+    out, a, m = [], ref.year, ref.month
+    for _ in range(n):
+        out.append((f"{a}-{m:02d}", f"{a}-{m:02d}-01", f"{a}-{m:02d}-31"))
+        a, m = (a, m - 1) if m > 1 else (a - 1, 12)
+    return out[::-1]
+
+
+def _meses_entre(ini: date, fim: date) -> list[tuple[str, str, str]]:
+    out, a, m = [], ini.year, ini.month
+    while (a, m) <= (fim.year, fim.month):
+        out.append((f"{a}-{m:02d}", f"{a}-{m:02d}-01", f"{a}-{m:02d}-31"))
+        a, m = (a, m + 1) if m < 12 else (a + 1, 1)
+    return out
+
+
+def _ativos_em(conn, dia: str) -> int:
+    """Pacientes em atendimento no dia: admitidos até o dia e sem alta até ele."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM pacientes WHERE data_admissao IS NOT NULL AND data_admissao <> '' AND data_admissao <= ? "
+        "AND (data_alta IS NULL OR data_alta = '' OR data_alta > ?)", (dia, dia)).fetchone()[0]
+
+
+def _periodo(conn, ini: date, fim: date) -> dict:
+    """Indicadores do período escolhido e do período anterior de mesmo tamanho (para a variação)."""
+    dias = (fim - ini).days + 1
+    ant_fim = ini - timedelta(days=1)
+    ant_ini = ant_fim - timedelta(days=dias - 1)
+    if ini.day == 1 and (ini.year, ini.month) == (fim.year, fim.month):  # mês: compara com os mesmos dias do mês anterior
+        ant_ini = ant_fim.replace(day=1)
+        ant_fim = ant_ini.replace(day=min(fim.day, ant_fim.day))
+
+    def eventos(a: date, b: date) -> dict:
+        ev = {r[0]: r[1] for r in conn.execute(
+            "SELECT evento, COUNT(*) FROM movimentacao WHERE data BETWEEN ? AND ? GROUP BY evento", (a.isoformat(), b.isoformat()))}
+        return {"admissoes": ev.get("Admissão", 0), "altas": ev.get("Alta", 0), "obitos": ev.get("Óbito", 0)}
+
+    return {
+        "ini": ini.isoformat(), "fim": fim.isoformat(), "dias": dias,
+        **eventos(ini, fim), "ativos": _ativos_em(conn, fim.isoformat()),
+        "mortalidade": _taxa_mortalidade(conn, ini.isoformat(), fim.isoformat()),
+        "anterior": {"ini": ant_ini.isoformat(), "fim": ant_fim.isoformat(), **eventos(ant_ini, ant_fim),
+                     "ativos": _ativos_em(conn, ant_fim.isoformat()),
+                     "mortalidade": _taxa_mortalidade(conn, ant_ini.isoformat(), ant_fim.isoformat())},
+    }
+
+
+def _evolucao(conn, ref: date, ini: date | None = None) -> dict:
+    """Série mensal da carteira (ativos no fim do mês, admissões, altas, óbitos) e resumo das terapias.
+
+    Com período (ini..ref): a série cobre os meses do período (mínimo de 8 meses) e as terapias contam os meses do período.
+    """
+    meses = _meses(ref)
+    if ini and len(_meses_entre(ini, ref)) > len(meses):
+        meses = _meses_entre(ini, ref)
+    meses_ter = _meses_entre(ini, ref) if ini else meses[-1:]
+    m_ini, m_fim = meses_ter[0][0], meses_ter[-1][0]
+    serie = []
+    for mes, ini, fim in meses:
+        ev = {r[0]: r[1] for r in conn.execute(
+            "SELECT evento, COUNT(*) FROM movimentacao WHERE data BETWEEN ? AND ? GROUP BY evento", (ini, fim))}
+        ativos = conn.execute(
+            "SELECT COUNT(*) FROM pacientes WHERE data_admissao IS NOT NULL AND data_admissao <> '' AND data_admissao <= ? "
+            "AND (data_alta IS NULL OR data_alta = '' OR data_alta > ?)", (fim, fim)).fetchone()[0]
+        serie.append({"mes": mes, "ativos": ativos, "admissoes": ev.get("Admissão", 0), "altas": ev.get("Alta", 0), "obitos": ev.get("Óbito", 0)})
+    ter: dict[str, dict] = {}
+    for mes, terapia, total in conn.execute(
+            "SELECT mes, terapia, COUNT(*) FROM terapias WHERE mes BETWEEN ? AND ? GROUP BY mes, terapia", (meses[0][0], meses[-1][0])):
+        ter.setdefault(terapia, {})[mes] = total
+    mes_ref = meses[-1][0]
+    situacao = conn.execute(
+        "SELECT s, COUNT(*) AS t FROM (SELECT COALESCE(NULLIF(situacao, ''), 'Não informado') AS s FROM terapias WHERE mes BETWEEN ? AND ?) x "
+        "GROUP BY s ORDER BY t DESC", (m_ini, m_fim)).fetchall()
+    prof: dict[str, dict] = {}
+    for nome, terapia in conn.execute(
+            "SELECT profissional, terapia FROM terapias WHERE mes BETWEEN ? AND ? AND profissional IS NOT NULL AND profissional <> ''", (m_ini, m_fim)):
+        p = prof.setdefault(nome, {"nome": nome, "total": 0, "terapias": set()})
+        p["total"] += 1
+        p["terapias"].add(terapia)
+    top = sorted(prof.values(), key=lambda p: (-p["total"], p["nome"]))[:8]
+    resumo = conn.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT codigo_paciente), COALESCE(SUM(sessoes), 0), COALESCE(SUM(sessoes * valor), 0) "
+        "FROM terapias WHERE mes BETWEEN ? AND ?", (m_ini, m_fim)).fetchone()
+    taxas = conn.execute(
+        "SELECT COUNT(*), SUM(CASE WHEN situacao = 'Ativa' THEN 1 ELSE 0 END), SUM(CASE WHEN agendado = 'Sim' THEN 1 ELSE 0 END), "
+        "SUM(CASE WHEN relatorio = 'Sim' THEN 1 ELSE 0 END) FROM terapias WHERE mes BETWEEN ? AND ?", (m_ini, m_fim)).fetchone()
+    ativos = conn.execute(f"SELECT COUNT(*) FROM pacientes WHERE {ATIVO}").fetchone()[0]
+    cobertos = conn.execute(
+        f"SELECT COUNT(DISTINCT t.codigo_paciente) FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente "
+        f"WHERE t.mes BETWEEN ? AND ? AND t.situacao = 'Ativa' AND (p.data_alta IS NULL OR p.data_alta = '')", (m_ini, m_fim)).fetchone()[0]
+    completos = conn.execute(
+        f"SELECT COUNT(*) FROM pacientes WHERE {ATIVO} AND nascimento IS NOT NULL AND nascimento <> '' "
+        "AND complexidade IS NOT NULL AND complexidade <> '' AND diagnostico IS NOT NULL AND diagnostico <> ''").fetchone()[0]
+    pct = lambda a, b: round((a or 0) * 100 / b, 1) if b else 0  # noqa: E731
+    indicadores = {
+        "terapias_ativas": {"pct": pct(taxas[1], taxas[0]), "parte": taxas[1] or 0, "total": taxas[0]},
+        "agendadas": {"pct": pct(taxas[2], taxas[0]), "parte": taxas[2] or 0, "total": taxas[0]},
+        "relatorios": {"pct": pct(taxas[3], taxas[0]), "parte": taxas[3] or 0, "total": taxas[0]},
+        "cadastro_completo": {"pct": pct(completos, ativos), "parte": completos, "total": ativos},
+        "cobertura": {"pct": pct(cobertos, ativos), "parte": cobertos, "total": ativos},
+    }
+    return {
+        "meses": [m for m, _, _ in meses],
+        "carteira": serie,
+        "terapias_mes": [{"terapia": t, "valores": [v.get(m, 0) for m, _, _ in meses]}
+                         for t, v in sorted(ter.items(), key=lambda x: -sum(x[1].values()))],
+        "situacao_terapias": _pairs(situacao),
+        "profissionais": [{"nome": p["nome"], "total": p["total"], "terapias": " · ".join(sorted(p["terapias"]))} for p in top],
+        "indicadores": indicadores,
+        "resumo_terapias": {"mes": mes_ref, "mes_ini": m_ini, "mes_fim": m_fim, "terapias": resumo[0], "pacientes": resumo[1], "sessoes": resumo[2], "valor": round(resumo[3] or 0, 2)},
+    }
+
+
+def dashboard(ref_text: str | None, periodo_motivos: str, ini_text: str | None = None, fim_text: str | None = None) -> dict:
     hoje = date.today()
-    ref = _parse(ref_text, hoje)
+    ref = _parse(fim_text or ref_text, hoje)
+    ini = _parse(ini_text, ref) if ini_text else None
+    if ini and ini > ref:
+        ini, ref = ref, ini
     periodos = _periodos(ref)
     with connect() as conn:
         def contar(evento: str) -> dict:
@@ -51,21 +168,22 @@ def dashboard(ref_text: str | None, periodo_motivos: str) -> dict:
                 for k, (a, b) in periodos.items()
             }
 
-        ini, fim = periodos.get(periodo_motivos, periodos["mes"])
+        ini_m, fim_m = (ini.isoformat(), ref.isoformat()) if ini else periodos.get(periodo_motivos, periodos["mes"])
         motivos = conn.execute(
             "SELECT m, COUNT(*) AS t FROM (SELECT COALESCE(NULLIF(motivo, ''), 'Não informado') AS m FROM movimentacao "
             "WHERE evento IN ('Alta', 'Óbito') AND data BETWEEN ? AND ?) x GROUP BY m ORDER BY t DESC LIMIT 8",
-            (ini, fim),
+            (ini_m, fim_m),
         ).fetchall()
 
         mes_atual = hoje.strftime("%Y-%m")
+        mes_de, mes_ate = (ini.strftime("%Y-%m"), ref.strftime("%Y-%m")) if ini else (mes_atual, mes_atual)
         pendencias = {
             r[0]: r[1]
             for r in conn.execute(
                 "SELECT t.terapia, COUNT(*) FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente "
-                "WHERE t.mes = ? AND t.situacao = 'Pendente' AND (p.data_alta IS NULL OR p.data_alta = '') "
+                "WHERE t.mes BETWEEN ? AND ? AND t.situacao = 'Pendente' AND (p.data_alta IS NULL OR p.data_alta = '') "
                 "GROUP BY t.terapia",
-                (mes_atual,),
+                (mes_de, mes_ate),
             )
         }
         terapias = [r[0] for r in conn.execute("SELECT valor FROM opcoes WHERE lista = 'terapias' ORDER BY id")]
@@ -124,4 +242,6 @@ def dashboard(ref_text: str | None, periodo_motivos: str) -> dict:
             "servicos": grupo("servico"),
             "operadoras": grupo("operadora"),
             "servico_operadora": [{"servico": s, "operadora": o, "total": t} for s, o, t in servico_operadora],
+            "evolucao": _evolucao(conn, ref, ini),
+            "periodo": _periodo(conn, ini or ref.replace(day=1), ref),
         }

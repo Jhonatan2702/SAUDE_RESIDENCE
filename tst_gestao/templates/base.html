@@ -6,36 +6,60 @@
 <meta name="csrf" content="{{ csrf_token }}">
 <title>{% block titulo %}{% endblock %} · TST-GESTÃO</title>
 <link rel="icon" href="{{ url_for('static', filename='logo.png') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+<script>try { if (localStorage.getItem('tst-menu') === 'recolhido') document.documentElement.classList.add('menu-recolhido'); } catch (e) {}</script>
 </head>
 <body>
+{% include "_icones.html" %}
+{% set COR_IC = {'bi': '#38bdf8', 'relatorios': '#a78bfa', 'pacientes': '#34d399', 'terapias': '#f472b6', 'movimentacao': '#fbbf24', 'listas': '#60a5fa', 'usuarios': '#fb923c', 'integracoes': '#2dd4bf', 'banco': '#c084fc'} %}
+{% macro item(rota, chave, icone, texto) %}<a href="{{ rota }}" class="{{ 'on' if ativa == chave }}" data-tip="{{ texto }}" style="--ic:{{ COR_IC.get(icone, '#94a3b8') }}"><svg class="ic"><use href="#i-{{ icone }}"/></svg><span class="tx">{{ texto }}</span></a>{% endmacro %}
+{% set grupo = {'dashboard': 'Análises', 'relatorios': 'Análises', 'pacientes': 'Cadastros', 'terapias': 'Cadastros', 'movimentacao': 'Cadastros',
+  'listas': 'Configurações', 'usuarios': 'Configurações', 'integracoes': 'Configurações', 'banco': 'Configurações', 'perfil': 'Minha conta'} %}
 <aside class="sidebar">
-  <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="TST"><div><strong>TST-GESTÃO</strong><small>Gestão de pacientes</small></div></div>
+  <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="TST"><div class="tx"><strong>TST-GESTÃO</strong><small>Gestão de pacientes</small></div></div>
   <nav>
     <span class="nav-sec">Análises</span>
-    <a href="{{ url_for('index') }}" class="{{ 'on' if ativa == 'dashboard' }}">📊 Painel BI</a>
-        <a href="{{ url_for('relatorios') }}" class="{{ 'on' if ativa == 'relatorios' }}">🖨️ Relatórios</a>    <span class="nav-sec">Cadastros</span>
-    <a href="{{ url_for('cadastro', ent='pacientes') }}" class="{{ 'on' if ativa == 'pacientes' }}">👤 Pacientes</a>
-    <a href="{{ url_for('cadastro', ent='terapias') }}" class="{{ 'on' if ativa == 'terapias' }}">🩺 Terapias</a>
-    <a href="{{ url_for('cadastro', ent='movimentacao') }}" class="{{ 'on' if ativa == 'movimentacao' }}">🔁 Movimentação</a>
+    <div class="nav-grupo">
+    {{ item(url_for('index'), 'dashboard', 'bi', 'Painel BI') }}
+    {{ item(url_for('relatorios'), 'relatorios', 'relatorios', 'Relatórios') }}
+    </div>
+    <span class="nav-sec">Cadastros</span>
+    <div class="nav-grupo">
+    {{ item(url_for('cadastro', ent='pacientes'), 'pacientes', 'pacientes', 'Pacientes') }}
+    {{ item(url_for('cadastro', ent='terapias'), 'terapias', 'terapias', 'Terapias') }}
+    {{ item(url_for('cadastro', ent='movimentacao'), 'movimentacao', 'movimentacao', 'Movimentação') }}
+    </div>
     {% if nivel >= 3 %}<span class="nav-sec">Configurações</span>
-    <a href="{{ url_for('listas') }}" class="{{ 'on' if ativa == 'listas' }}">☰ Listas suspensas</a>{% endif %}
-    {% if nivel >= 4 %}<a href="{{ url_for('usuarios') }}" class="{{ 'on' if ativa == 'usuarios' }}">🔐 Usuários e acessos</a>
-    <a href="{{ url_for('integracoes') }}" class="{{ 'on' if ativa == 'integracoes' }}">🔌 Integrações API</a>
-    <a href="{{ url_for('pagina_banco') }}" class="{{ 'on' if ativa == 'banco' }}">🗄️ Banco de dados</a>{% endif %}
+    <div class="nav-grupo">
+    {{ item(url_for('listas'), 'listas', 'listas', 'Listas suspensas') }}
+    {% if nivel >= 4 %}{{ item(url_for('usuarios'), 'usuarios', 'usuarios', 'Usuários e acessos') }}
+    {{ item(url_for('integracoes'), 'integracoes', 'integracoes', 'Integrações API') }}
+    {{ item(url_for('pagina_banco'), 'banco', 'banco', 'Banco de dados') }}{% endif %}
+    </div>{% endif %}
+    <button type="button" class="recolher" id="btn-recolher" data-tip="Expandir menu"><svg class="ic"><use href="#i-recolher"/></svg><span class="tx">Recolher menu</span></button>
   </nav>
   <div class="userbox">
-    <a href="{{ url_for('perfil') }}" class="{{ 'on' if ativa == 'perfil' }}"><span class="avatar">{{ usuario['nome'][:1]|upper }}</span><span><b>{{ usuario['nome'] }}</b><small>{{ usuario['nivel']|capitalize }}</small></span></a>
-    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn ghost sm" type="submit">Sair</button></form>
+    <a href="{{ url_for('perfil') }}" class="{{ 'on' if ativa == 'perfil' }}" title="Meu perfil"><span class="avatar">{{ usuario['nome'][:1]|upper }}</span><span class="tx"><b>{{ usuario['nome'] }}</b><small>{{ usuario['nivel']|capitalize }}</small></span></a>
+    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn ghost sm" type="submit" title="Sair do sistema"><svg class="ic"><use href="#i-sair"/></svg><span class="tx">Sair</span></button></form>
   </div>
 </aside>
 <main class="content">
-  <header class="topbar"><h1>{% block cabecalho %}{% endblock %}</h1><div class="actions">{% block acoes %}{% endblock %}</div></header>
+  {% set ic_pag = {'dashboard': 'bi', 'perfil': 'perfil'}.get(ativa, ativa) %}
+  {% block topo %}<header class="bi-topo topo-pag"><div class="bt-tit"><i class="bt-ic"><svg class="ic"><use href="#i-{{ ic_pag or 'bi' }}"/></svg></i><span class="bt-trilha">{% block trilha %}{{ grupo.get(ativa, 'TST-GESTÃO') }}{% endblock %} <b>›</b></span><h1>{% block cabecalho %}{% endblock %}</h1></div><div class="actions">{% block acoes %}{% endblock %}</div></header>{% endblock %}
   {% block conteudo %}{% endblock %}
 </main>
 <div id="toast"></div>
 <script>window.NIVEL = {{ nivel }};</script>
 <script src="{{ url_for('static', filename='common.js') }}"></script>
+<script>
+document.getElementById('btn-recolher').onclick = () => {
+  const r = document.documentElement.classList.toggle('menu-recolhido');
+  try { localStorage.setItem('tst-menu', r ? 'recolhido' : 'aberto'); } catch (e) {}
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 260);  // gráficos se reajustam à nova largura
+};
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -4,10 +4,10 @@
 {% block acoes %}
 <input id="q" class="search" type="search" placeholder="Buscar…">
 <input id="mes" type="month" class="hidden" title="Filtrar por mês">
-{% if nivel >= 2 %}<button id="novo" class="btn primary">+ Novo</button>{% endif %}
+{% if nivel >= 2 %}<button id="novo" class="btn primary"><svg class="ic"><use href="#i-mais"/></svg>Novo registro</button>{% endif %}
 {% endblock %}
 {% block conteudo %}
-<div class="card flush"><div class="table-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div><div id="vazio" class="empty hidden">Nenhum registro encontrado.</div></div>
+<div class="card flush"><div class="barra-tab"><b>{{ titulo }}</b><span id="contador" class="contador"></span></div><div class="table-wrap"><table id="tbl"><thead></thead><tbody></tbody></table></div><div id="vazio" class="empty hidden">Nenhum registro encontrado.</div></div>
 <dialog id="dlg"><form method="dialog" id="frm"><h3 id="dlg-t"></h3><div id="campos" class="form-grid"></div><div id="dlg-erro" class="alert hidden"></div>
 <div class="dlg-actions"><button type="button" class="btn ghost" id="cancelar">Cancelar</button><button type="submit" class="btn primary">Salvar</button></div></form></dialog>
 {% endblock %}

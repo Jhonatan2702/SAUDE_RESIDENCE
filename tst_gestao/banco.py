@@ -54,7 +54,7 @@ TABELAS: dict[str, dict] = {
         ID, _t("mes", 10, nn=True), _t("codigo_paciente", 60, nn=True), _t("terapia", 60, nn=True), _t("modalidade", 60),
         _t("empresa", 120), _t("profissional", 120), _t("situacao", 60), Col("sessoes", "int"), _t("frequencia", 60),
         Col("valor", "real"), _t("agendado", 10), _t("relatorio", 10), _t("observacao", 2000)],
-        unicos=[("mes", "codigo_paciente", "terapia")]),
+        unicos=[("mes", "codigo_paciente", "terapia", "profissional")]),
     "movimentacao": dict(cols=[
         ID, _t("data", 20, nn=True), _t("codigo_paciente", 60, nn=True), _t("evento", 40, nn=True), _t("motivo", 1000)]),
     "opcoes": dict(cols=[ID, _t("lista", 60, nn=True), _t("valor", 200, nn=True)], unicos=[("lista", "valor")]),
