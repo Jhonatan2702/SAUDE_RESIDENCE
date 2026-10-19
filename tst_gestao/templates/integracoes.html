@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block titulo %}Integrações API{% endblock %}
+{% block cabecalho %}Integrações API{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <h3>Chaves de API <small>entrada e saída · acesso somente nesta máquina (127.0.0.1:8765)</small></h3>
+  <form id="f-chave" class="inline-form" style="margin-bottom:14px">
+    <input id="ch-nome" placeholder="Nome (ex.: Sistema financeiro)" required>
+    <select id="ch-escopo" style="width:auto"><option value="leitura">Leitura</option><option value="escrita">Escrita (inclui leitura)</option></select>
+    <button class="btn primary" type="submit">Gerar chave</button>
+  </form>
+  <div id="nova-chave" class="alert hidden" style="background:#e8f7ee;color:#14532d;border-color:#b7e4c7"></div>
+  <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Prefixo</th><th>Escopo</th><th>Status</th><th>Criada</th><th>Último uso</th><th></th></tr></thead><tbody id="tb-chaves"></tbody></table></div>
+</div>
+
+<div class="card">
+  <h3>Webhooks <small>o TST-GESTÃO envia um POST JSON assinado (HMAC-SHA256) a cada evento</small></h3>
+  <form id="f-hook" class="form-grid" style="margin-bottom:14px">
+    <label>Nome<input id="wh-nome" required></label>
+    <label>URL (http/https)<input id="wh-url" type="url" required placeholder="https://..."></label>
+    <label class="span2">Eventos
+      <span class="row" style="font-weight:400">
+        <label class="inline"><input type="checkbox" class="wh-ev" value="*" checked style="width:auto"> Todos</label>
+        {% for e in eventos %}<label class="inline"><input type="checkbox" class="wh-ev" value="{{ e }}" style="width:auto"> {{ e }}</label>{% endfor %}
+      </span></label>
+    <div><button class="btn primary" type="submit">Adicionar webhook</button></div>
+  </form>
+  <div class="table-wrap"><table><thead><tr><th>Nome</th><th>URL</th><th>Eventos</th><th>Segredo (assinatura)</th><th>Status</th><th></th></tr></thead><tbody id="tb-hooks"></tbody></table></div>
+  <h3 style="margin-top:18px">Últimas entregas</h3>
+  <div class="table-wrap" style="max-height:220px"><table><thead><tr><th>Data</th><th>Webhook</th><th>Evento</th><th>Resultado</th></tr></thead><tbody id="tb-log"></tbody></table></div>
+</div>
+
+<div class="card">
+  <h3>Importar planilha <small>.xlsx ou .csv · cabeçalho na 1ª linha · até 5.000 linhas</small></h3>
+  <form id="f-imp" class="inline-form">
+    <select id="imp-ent" style="width:auto">{% for k, v in entidades.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+    <input id="imp-file" type="file" accept=".xlsx,.xlsm,.csv,.txt" required>
+    <button class="btn primary" type="submit">Importar</button>
+  </form>
+  <p class="muted">Registros existentes (mesmo código / mesmo paciente+terapia+mês) são atualizados; campos vazios preservam o valor atual. Movimentações repetidas são ignoradas. Valores novos de listas suspensas são cadastrados automaticamente.</p>
+  <div id="imp-res"></div>
+</div>
+
+<div class="card">
+  <h3>Documentação rápida</h3>
+  <p class="muted">Envie a chave em <code>Authorization: Bearer &lt;chave&gt;</code>. Base: <code>http://127.0.0.1:8765/api/v1</code></p>
+<pre id="doc" style="background:#0b1220;color:#d6e4f5;padding:14px;border-radius:8px;overflow:auto;font-size:12.5px">
+# SAÍDA (leitura)
+GET /api/v1/pacientes?ativo=true&amp;cidade=...&amp;q=...&amp;limit=100&amp;offset=0
+GET /api/v1/terapias?mes=2026-10&amp;situacao=Pendente&amp;terapia=FONO
+GET /api/v1/movimentacao?de=2026-10-01&amp;ate=2026-10-31&amp;evento=Alta
+GET /api/v1/indicadores?ref=2026-10-19&amp;periodo=mes
+
+# ENTRADA (escrita) — objeto ou lista (até 1000); upsert por código / paciente+terapia+mês
+POST /api/v1/pacientes       {"codigo":"P10","nome":"Maria","nascimento":"1950-05-10","data_admissao":"2026-10-19"}
+POST /api/v1/movimentacao    {"data":"2026-10-19","codigo_paciente":"P10","evento":"Alta","motivo":"Alta clínica"}
+POST /api/v1/terapias        {"mes":"2026-10","codigo_paciente":"P10","terapia":"FONO","situacao":"Pendente"}
+POST /api/v1/importar/pacientes   (multipart, campo "file": .xlsx ou .csv)
+
+# curl
+curl -H "Authorization: Bearer SUA_CHAVE" http://127.0.0.1:8765/api/v1/pacientes
+
+# WEBHOOK recebido: cabeçalhos X-TST-Event e X-TST-Signature (sha256=HMAC do corpo com o segredo)
+{"evento":"paciente.criado","ocorrido_em":"2026-10-19T13:00:00","dados":{...}}
+</pre>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+function bt(t, fn, cls = '') { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost sm ' + cls; b.textContent = t; b.style.marginLeft = '4px'; b.onclick = fn; return b; }
+
+async function carregarChaves() {
+  const rows = await api('/api/integracoes/chaves'), tb = $('tb-chaves'); tb.innerHTML = '';
+  rows.forEach(k => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(k.nome)}</td><td><code>${esc(k.prefixo)}…</code></td><td><span class="tag">${esc(k.escopo)}</span></td><td>${k.ativo ? 'Ativa' : 'Revogada'}</td><td>${esc((k.criado_em || '').replace('T', ' '))}</td><td>${esc((k.ultimo_uso || '—').replace('T', ' '))}</td><td class="r"></td>`;
+    tr.lastChild.append(
+      bt(k.ativo ? 'Revogar' : 'Reativar', async () => { await api('/api/integracoes/chaves/' + k.id, 'PUT', {ativo: !k.ativo}); carregarChaves(); }),
+      bt('Excluir', async () => { if (confirm('Excluir esta chave? Integrações que a usam deixarão de funcionar.')) { await api('/api/integracoes/chaves/' + k.id, 'DELETE'); carregarChaves(); } }, 'danger'));
+    tb.append(tr);
+  });
+}
+$('f-chave').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const r = await api('/api/integracoes/chaves', 'POST', {nome: $('ch-nome').value, escopo: $('ch-escopo').value});
+    const box = $('nova-chave'); box.classList.remove('hidden');
+    box.innerHTML = 'Chave gerada — copie agora, ela não será exibida novamente:<br><code style="font-size:14px;user-select:all">' + esc(r.chave) + '</code>';
+    $('ch-nome').value = ''; carregarChaves();
+  } catch (err) { toast(err.message, true); }
+};
+
+async function carregarHooks() {
+  const d = await api('/api/integracoes/webhooks'), tb = $('tb-hooks'); tb.innerHTML = '';
+  d.webhooks.forEach(h => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(h.nome)}</td><td>${esc(h.url)}</td><td>${esc(h.eventos === '*' ? 'Todos' : h.eventos)}</td><td><code style="user-select:all">${esc(h.segredo)}</code></td><td>${h.ativo ? 'Ativo' : 'Pausado'}</td><td class="r"></td>`;
+    tr.lastChild.append(
+      bt('Testar', async () => { try { const r = await api(`/api/integracoes/webhooks/${h.id}/teste`, 'POST'); toast((r.ok ? 'Entregue: ' : 'Falhou: ') + r.resultado, !r.ok); carregarHooks(); } catch (err) { toast(err.message, true); } }),
+      bt(h.ativo ? 'Pausar' : 'Ativar', async () => { await api('/api/integracoes/webhooks/' + h.id, 'PUT', {nome: h.nome, url: h.url, eventos: h.eventos.split(','), ativo: !h.ativo}); carregarHooks(); }),
+      bt('Excluir', async () => { if (confirm('Excluir este webhook?')) { await api('/api/integracoes/webhooks/' + h.id, 'DELETE'); carregarHooks(); } }, 'danger'));
+    tb.append(tr);
+  });
+  $('tb-log').innerHTML = d.log.map(l => `<tr><td>${esc(l.criado_em.replace('T', ' '))}</td><td>${esc(l.nome || '—')}</td><td>${esc(l.evento)}</td><td>${l.ok ? '✅' : '❌'} ${esc(l.resultado)}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">Nenhuma entrega registrada.</td></tr>';
+}
+document.querySelectorAll('.wh-ev').forEach(c => c.onchange = () => {
+  const todos = document.querySelector('.wh-ev[value="*"]');
+  if (c === todos && c.checked) document.querySelectorAll('.wh-ev').forEach(o => { if (o !== todos) o.checked = false; });
+  else if (c !== todos && c.checked) todos.checked = false;
+});
+$('f-hook').onsubmit = async e => {
+  e.preventDefault();
+  const eventos = [...document.querySelectorAll('.wh-ev:checked')].map(c => c.value);
+  try { await api('/api/integracoes/webhooks', 'POST', {nome: $('wh-nome').value, url: $('wh-url').value, eventos}); e.target.reset(); toast('Webhook adicionado.'); carregarHooks(); }
+  catch (err) { toast(err.message, true); }
+};
+
+$('f-imp').onsubmit = async e => {
+  e.preventDefault();
+  const fd = new FormData(); fd.append('file', $('imp-file').files[0]);
+  const out = $('imp-res'); out.innerHTML = 'Importando…';
+  const r = await fetch('/api/importar/' + $('imp-ent').value, {method: 'POST', headers: {'X-CSRF-Token': CSRF}, body: fd});
+  const d = await r.json().catch(() => ({}));
+  if (d.erro) { out.innerHTML = `<div class="alert">${esc(d.erro)}</div>`; return; }
+  out.innerHTML = `<p><b>${d.total}</b> linhas · <b>${d.criados}</b> criadas · <b>${d.atualizados}</b> atualizadas · <b>${d.ignorados}</b> ignoradas · <b>${d.erros.length}</b> com erro</p>` +
+    (d.erros.length ? '<div class="table-wrap" style="max-height:200px"><table><thead><tr><th>Linha</th><th>Erro</th></tr></thead><tbody>' + d.erros.slice(0, 200).map(x => `<tr><td>${x.linha + 1}</td><td>${esc(x.erro)}</td></tr>`).join('') + '</tbody></table></div>' : '');
+};
+carregarChaves(); carregarHooks();
+</script>
+{% endblock %}

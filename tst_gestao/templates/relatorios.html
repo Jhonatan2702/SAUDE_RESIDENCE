@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Relatórios{% endblock %}
+{% block cabecalho %}Relatórios{% endblock %}
+{% block conteudo %}
+<p class="rel-intro">Gere listagens e relatórios de cada análise para <b>imprimir</b>, <b>salvar em PDF</b> ou <b>exportar para Excel (CSV)</b>.</p>
+{% for grupo, itens in grupos.items() %}
+<h2 class="rel-grupo">{{ grupo }}</h2>
+<div class="rel-cards">
+  {% for slug, r in itens %}
+  <a class="rel-card" href="{{ url_for('relatorio', slug=slug) }}">
+    <span class="rel-ico">{{ r.icone }}</span>
+    <span><b>{{ r.titulo }}</b><small>{{ r.descr }}</small></span>
+  </a>
+  {% endfor %}
+</div>
+{% endfor %}
+{% endblock %}

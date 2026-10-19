@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar · TST-GESTÃO</title>
+<link rel="icon" href="{{ url_for('static', filename='logo.png') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body class="login-page">
+<section class="login-hero"><img src="{{ url_for('static', filename='logo.png') }}" alt="TST"><h1>TST-GESTÃO</h1><p>Sistema de gestão de pacientes, terapias e indicadores assistenciais.</p></section>
+<section class="login-card">
+  <h2>Acesse sua conta</h2>
+  <form method="post" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ session.get('csrf', '') }}">
+    <label>Usuário<input name="usuario" required autofocus></label>
+    <label>Senha<input name="senha" type="password" required></label>
+    {% if erro %}<div class="alert">{{ erro }}</div>{% endif %}
+    <button class="btn primary block" type="submit">Entrar</button>
+  </form>
+  <small class="muted">Primeiro acesso: usuário <b>admin</b>, senha <b>admin</b> (será solicitada a troca).</small>
+</section>
+</body>
+</html>

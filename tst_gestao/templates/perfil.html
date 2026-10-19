@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}Meu perfil{% endblock %}
+{% block cabecalho %}Meu perfil{% endblock %}
+{% block conteudo %}
+<div class="card narrow">
+  {% if usuario['trocar_senha'] %}<div class="alert">Por segurança, defina uma nova senha para continuar.</div>{% endif %}
+  <h3>Alterar senha</h3>
+  <p class="muted">{{ usuario['nome'] }} · usuário <b>{{ usuario['usuario'] }}</b> · nível <b>{{ usuario['nivel'] }}</b></p>
+  <form id="f-senha" class="form-grid one">
+    <label>Senha atual<input type="password" name="atual" required></label>
+    <label>Nova senha (mín. 6 caracteres)<input type="password" name="nova" required minlength="6"></label>
+    <label>Confirmar nova senha<input type="password" name="conf" required></label>
+    <button class="btn primary" type="submit">Salvar senha</button>
+  </form>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('f-senha').addEventListener('submit', async e => {
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(e.target));
+  if (d.nova !== d.conf) return toast('A confirmação não confere.', true);
+  try { await api('/api/senha', 'POST', {atual: d.atual, nova: d.nova}); toast('Senha alterada.'); setTimeout(() => location.href = '/', 700); }
+  catch (err) { toast(err.message, true); }
+});
+</script>
+{% endblock %}

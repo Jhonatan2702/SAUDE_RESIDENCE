@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block titulo %}Usuários{% endblock %}
+{% block cabecalho %}Usuários e níveis de acesso{% endblock %}
+{% block acoes %}<button id="novo" class="btn primary">+ Novo usuário</button>{% endblock %}
+{% block conteudo %}
+<div class="card flush"><div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Nome</th><th>Nível</th><th>Status</th><th></th></tr></thead><tbody id="tb"></tbody></table></div></div>
+<div class="card"><b>Níveis:</b> <span class="muted">Consulta — apenas visualiza · Operador — cadastra e edita · Gestor — também exclui e gerencia listas · Admin — acesso total, incluindo usuários.</span></div>
+<dialog id="dlg"><form id="frm" method="dialog"><h3 id="dlg-t"></h3>
+<div class="form-grid">
+<label>Usuário<input name="usuario" required></label><label>Nome<input name="nome" required></label>
+<label>Nível<select name="nivel">{% for n in niveis %}<option value="{{ n }}">{{ n|capitalize }}</option>{% endfor %}</select></label>
+<label>Status<select name="ativo"><option value="1">Ativo</option><option value="0">Inativo</option></select></label>
+<label class="span2">Senha <small id="dica" class="muted"></small><input name="senha" type="password" autocomplete="new-password"></label></div>
+<div id="dlg-erro" class="alert hidden"></div>
+<div class="dlg-actions"><button type="button" class="btn ghost" id="cancelar">Cancelar</button><button class="btn primary" type="submit">Salvar</button></div></form></dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+const dlg = document.getElementById('dlg'), frm = document.getElementById('frm'), tb = document.getElementById('tb');
+let editId = null;
+async function carregar() {
+  const rows = await api('/api/usuarios'); tb.innerHTML = '';
+  rows.forEach(u => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(u.usuario)}</td><td>${esc(u.nome)}</td><td><span class="tag">${esc(u.nivel)}</span></td><td>${u.ativo ? 'Ativo' : 'Inativo'}</td><td class="r"></td>`;
+    const td = tr.lastChild;
+    const e = btn('Editar', () => abrir(u)), x = btn('Excluir', async () => {
+      if (!confirm(`Excluir o usuário ${u.usuario}?`)) return;
+      try { await api('/api/usuarios/' + u.id, 'DELETE'); carregar(); } catch (err) { toast(err.message, true); } }, 'danger');
+    td.append(e, x); tb.append(tr);
+  });
+}
+function btn(t, fn, cls = '') { const b = document.createElement('button'); b.className = 'btn ghost sm ' + cls; b.textContent = t; b.onclick = fn; return b; }
+function abrir(u) {
+  editId = u ? u.id : null; frm.reset();
+  document.getElementById('dlg-t').textContent = u ? 'Editar usuário' : 'Novo usuário';
+  document.getElementById('dica').textContent = u ? '(deixe em branco para manter)' : '(mín. 6 caracteres; será exigida troca no 1º acesso)';
+  if (u) for (const k of ['usuario', 'nome', 'nivel', 'ativo']) frm.elements[k].value = u[k];
+  document.getElementById('dlg-erro').classList.add('hidden'); dlg.showModal();
+}
+document.getElementById('novo').onclick = () => abrir(null);
+document.getElementById('cancelar').onclick = () => dlg.close();
+frm.onsubmit = async e => {
+  e.preventDefault(); const d = Object.fromEntries(new FormData(frm)); d.ativo = +d.ativo;
+  try { await api(editId ? '/api/usuarios/' + editId : '/api/usuarios', editId ? 'PUT' : 'POST', d); dlg.close(); toast('Usuário salvo.'); carregar(); }
+  catch (err) { const a = document.getElementById('dlg-erro'); a.textContent = err.message; a.classList.remove('hidden'); }
+};
+carregar();
+</script>
+{% endblock %}

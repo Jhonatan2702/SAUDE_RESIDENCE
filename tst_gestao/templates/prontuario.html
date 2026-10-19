@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}Prontuário{% endblock %}
+{% block cabecalho %}Prontuário do paciente{% endblock %}
+{% block acoes %}
+<a class="btn ghost" href="{{ url_for('cadastro', ent='pacientes') }}">← Pacientes</a>
+{% if nivel >= 2 %}<button id="b-evo" class="btn primary">+ Registro</button><button id="b-anx" class="btn primary">+ Anexo</button>{% endif %}
+{% endblock %}
+{% block conteudo %}
+<div class="card" id="ficha"></div>
+<div class="tabs"><button class="tab on" data-tab="linha">Linha do tempo</button><button class="tab" data-tab="evolucoes">Evoluções</button><button class="tab" data-tab="anexos">Anexos</button></div>
+<div id="p-linha"><div class="chips-filtro" id="filtros"></div><div class="timeline" id="timeline"></div></div>
+<div id="p-evolucoes" class="hidden"></div>
+<div id="p-anexos" class="hidden"><div class="card flush"><div class="table-wrap"><table><thead><tr><th>Categoria</th><th>Descrição</th><th>Arquivo</th><th>Data</th><th>Tamanho</th><th>Enviado por</th><th></th></tr></thead><tbody id="tb-anx"></tbody></table></div><div id="vazio-anx" class="empty hidden">Nenhum anexo.</div></div></div>
+
+<dialog id="dlg-evo"><form id="f-evo" method="dialog"><h3>Novo registro no prontuário</h3>
+<div class="form-grid"><label>Data<input type="date" name="data" required value="{{ hoje }}"></label><label>Tipo<select name="tipo" id="evo-tipo" required></select></label>
+<label class="span2">Profissional<select name="profissional" id="evo-prof"></select></label>
+<label class="span2">Texto<textarea name="texto" rows="7" required maxlength="20000"></textarea></label></div>
+<div class="alert hidden" id="erro-evo"></div><div class="dlg-actions"><button type="button" class="btn ghost" data-fechar="dlg-evo">Cancelar</button><button class="btn primary" type="submit">Salvar</button></div></form></dialog>
+
+<dialog id="dlg-anx"><form id="f-anx" method="dialog"><h3>Anexar documento</h3>
+<div class="form-grid"><label>Categoria<select name="categoria" id="anx-cat" required></select></label><label>Data do documento<input type="date" name="data_documento"></label>
+<label class="span2">Descrição<input name="descricao" maxlength="300" placeholder="Ex.: Hemograma completo"></label>
+<label class="span2">Arquivo (até 20 MB · pdf, imagens, doc/docx, xls/xlsx, csv, txt)<input type="file" name="file" required accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.xls,.xlsx,.csv,.txt,.odt,.ods"></label></div>
+<div class="alert hidden" id="erro-anx"></div><div class="dlg-actions"><button type="button" class="btn ghost" data-fechar="dlg-anx">Cancelar</button><button class="btn primary" type="submit" id="btn-anx">Enviar</button></div></form></dialog>
+{% endblock %}
+{% block scripts %}<script>window.CODIGO = {{ codigo|tojson }};</script><script src="{{ url_for('static', filename='prontuario.js') }}"></script>{% endblock %}

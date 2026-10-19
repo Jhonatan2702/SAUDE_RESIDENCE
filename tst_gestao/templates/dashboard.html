@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block titulo %}Painel BI{% endblock %}
+{% block cabecalho %}Painel BI{% endblock %}
+{% block acoes %}<label class="inline">Data de referência <input type="date" id="ref" value="{{ hoje }}"></label>{% endblock %}
+{% block conteudo %}
+<section class="kpis" id="kpis"></section>
+<section class="grid">
+  <div class="card"><h3>Pendências por terapia <small>mês atual · situação “Pendente”</small></h3><div class="chart"><canvas id="c-pend"></canvas></div></div>
+  <div class="card"><h3>Principais motivos de alta
+    <select id="per-mot"><option value="dia">Dia</option><option value="mes" selected>Mês</option><option value="ano">Ano</option></select></h3><div class="chart"><canvas id="c-mot"></canvas></div></div>
+  <div class="card"><h3>Complexidade <small>pacientes ativos</small></h3><div class="chart"><canvas id="c-cx"></canvas></div></div>
+  <div class="card"><h3>Pacientes por idade <small id="idade-media"></small></h3><div class="chart"><canvas id="c-idade"></canvas></div></div>
+  <div class="card"><h3>Pacientes por bairro</h3><div class="chart"><canvas id="c-bairro"></canvas></div></div>
+  <div class="card"><h3>Pacientes por cidade</h3><div class="chart"><canvas id="c-cidade"></canvas></div></div>
+  <div class="card"><h3>Pacientes por diagnóstico</h3><div class="chart"><canvas id="c-diag"></canvas></div></div>
+  <div class="card"><h3>Pacientes por serviço</h3><div class="chart"><canvas id="c-serv"></canvas></div></div>
+  <div class="card"><h3>Pacientes por operadora</h3><div class="chart"><canvas id="c-oper"></canvas></div></div>
+  <div class="card wide"><h3>Serviço × operadora</h3><div class="table-wrap"><table id="t-so"><thead><tr><th>Serviço</th><th>Operadora</th><th class="r">Pacientes</th></tr></thead><tbody></tbody></table></div></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+<script src="{{ url_for('static', filename='dashboard.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titulo %}Listas suspensas{% endblock %}
+{% block cabecalho %}Listas suspensas{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <div class="row"><label class="inline">Lista<select id="lista">{% for k, v in listas.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></label>
+  <form id="f-add" class="inline-form"><input id="novo" placeholder="Novo valor" required><button class="btn primary" type="submit">Adicionar</button></form></div>
+  <ul id="itens" class="chips"></ul>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const sel = document.getElementById('lista'), ul = document.getElementById('itens');
+async function carregar() {
+  const o = await api('/api/opcoes'); ul.innerHTML = '';
+  (o[sel.value] || []).forEach(v => {
+    const li = document.createElement('li'); li.textContent = v;
+    const b = document.createElement('button'); b.textContent = '×'; b.title = 'Remover';
+    b.onclick = async () => { if (!confirm(`Remover "${v}" da lista?\nRegistros existentes não são alterados.`)) return;
+      await api('/api/opcoes/' + sel.value, 'DELETE', {valor: v}); carregar(); };
+    li.append(b); ul.append(li);
+  });
+}
+sel.onchange = carregar;
+document.getElementById('f-add').onsubmit = async e => {
+  e.preventDefault(); const i = document.getElementById('novo');
+  try { await api('/api/opcoes/' + sel.value, 'POST', {valor: i.value}); i.value = ''; carregar(); } catch (err) { toast(err.message, true); }
+};
+carregar();
+</script>
+{% endblock %}

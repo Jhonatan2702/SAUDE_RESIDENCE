@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf" content="{{ csrf_token }}">
+<title>{% block titulo %}{% endblock %} · TST-GESTÃO</title>
+<link rel="icon" href="{{ url_for('static', filename='logo.png') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="TST"><div><strong>TST-GESTÃO</strong><small>Gestão de pacientes</small></div></div>
+  <nav>
+    <span class="nav-sec">Análises</span>
+    <a href="{{ url_for('index') }}" class="{{ 'on' if ativa == 'dashboard' }}">📊 Painel BI</a>
+        <a href="{{ url_for('relatorios') }}" class="{{ 'on' if ativa == 'relatorios' }}">🖨️ Relatórios</a>    <span class="nav-sec">Cadastros</span>
+    <a href="{{ url_for('cadastro', ent='pacientes') }}" class="{{ 'on' if ativa == 'pacientes' }}">👤 Pacientes</a>
+    <a href="{{ url_for('cadastro', ent='terapias') }}" class="{{ 'on' if ativa == 'terapias' }}">🩺 Terapias</a>
+    <a href="{{ url_for('cadastro', ent='movimentacao') }}" class="{{ 'on' if ativa == 'movimentacao' }}">🔁 Movimentação</a>
+    {% if nivel >= 3 %}<span class="nav-sec">Configurações</span>
+    <a href="{{ url_for('listas') }}" class="{{ 'on' if ativa == 'listas' }}">☰ Listas suspensas</a>{% endif %}
+    {% if nivel >= 4 %}<a href="{{ url_for('usuarios') }}" class="{{ 'on' if ativa == 'usuarios' }}">🔐 Usuários e acessos</a>
+    <a href="{{ url_for('integracoes') }}" class="{{ 'on' if ativa == 'integracoes' }}">🔌 Integrações API</a>{% endif %}
+  </nav>
+  <div class="userbox">
+    <a href="{{ url_for('perfil') }}" class="{{ 'on' if ativa == 'perfil' }}"><span class="avatar">{{ usuario['nome'][:1]|upper }}</span><span><b>{{ usuario['nome'] }}</b><small>{{ usuario['nivel']|capitalize }}</small></span></a>
+    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn ghost sm" type="submit">Sair</button></form>
+  </div>
+</aside>
+<main class="content">
+  <header class="topbar"><h1>{% block cabecalho %}{% endblock %}</h1><div class="actions">{% block acoes %}{% endblock %}</div></header>
+  {% block conteudo %}{% endblock %}
+</main>
+<div id="toast"></div>
+<script>window.NIVEL = {{ nivel }};</script>
+<script src="{{ url_for('static', filename='common.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

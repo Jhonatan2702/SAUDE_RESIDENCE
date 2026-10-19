@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set f = d.meta.filtros %}
+{% block titulo %}{{ d.titulo }}{% endblock %}
+{% block cabecalho %}Relatório{% endblock %}
+{% block acoes %}
+<a class="btn ghost" href="{{ url_for('relatorios') }}">← Relatórios</a>
+<a class="btn ghost" href="{{ url_for('relatorio', slug=d.slug, formato='csv', **request.args) }}">⬇ CSV (Excel)</a>
+<button class="btn primary" type="button" onclick="window.print()">🖨️ Imprimir / Salvar PDF</button>
+{% endblock %}
+{% block conteudo %}
+{% if f %}
+<form class="card rel-filtros no-print" method="get">
+  {% if 'periodo' in f %}
+  <label>Período<select name="periodo">{% for k, v in periodos.items() %}<option value="{{ k }}" {{ 'selected' if k == d.params.periodo }}>{{ v }}</option>{% endfor %}</select></label>
+  <label>Data de referência<input type="date" name="ref" value="{{ d.params.ref.isoformat() }}"></label>
+  {% endif %}
+  {% if 'mes' in f %}<label>Mês<input type="month" name="mes" value="{{ d.params.mes }}"></label>{% endif %}
+  {% if 'situacao' in f %}<label>Situação<select name="situacao">{% for k, v in situacoes.items() %}<option value="{{ k }}" {{ 'selected' if k == d.params.situacao }}>{{ v }}</option>{% endfor %}</select></label>{% endif %}
+  <button class="btn primary" type="submit">Atualizar</button>
+</form>
+{% endif %}
+
+<article class="folha">
+  <header class="folha-topo">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="TST">
+    <div class="folha-tit"><small>TST-GESTÃO · Gestão de pacientes</small><h2>{{ d.titulo }}</h2></div>
+    <div class="folha-meta">Emitido em {{ d.gerado_em.strftime('%d/%m/%Y %H:%M') }}<br>Por {{ usuario['nome'] }}</div>
+  </header>
+  <div class="folha-filtros">{% for k, v in d.filtros %}<span><b>{{ k }}:</b> {{ v }}</span>{% endfor %}</div>
+  <div class="kpis">{% for k, v in d.resumo %}<div class="kpi"><small>{{ k }}</small><strong>{{ v }}</strong></div>{% endfor %}</div>
+  {% for s in d.secoes %}
+  <section class="folha-sec">
+    <h3>{{ s.titulo }}</h3><div class="rel-scroll">
+    <table class="rel-tab{{ ' compacta' if s.rodape }}">
+      <thead><tr>{% for c in s.colunas %}{% set v = s.linhas[0][loop.index0] if s.linhas else '' %}<th{% if v is number or (v is string and (v[-1:] == '%' or v[:2] == 'R$')) %} class="num"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for l in s.linhas %}<tr>{% for c in l %}<td{% if c is number or (c is string and (c[-1:] == '%' or c[:2] == 'R$')) %} class="num"{% endif %}>{{ c }}</td>{% endfor %}</tr>
+      {% else %}<tr><td colspan="{{ s.colunas|length }}" class="vazio">Nenhum registro encontrado.</td></tr>{% endfor %}
+      </tbody>
+      {% if s.rodape %}<tfoot><tr>{% for c in s.rodape %}<td{% if c is number or (c is string and c[-1:] == '%') %} class="num"{% endif %}>{{ c }}</td>{% endfor %}</tr></tfoot>{% endif %}
+    </table></div>
+  </section>
+  {% endfor %}
+  <footer class="folha-rodape">TST-GESTÃO · Documento gerado automaticamente · Contém dados confidenciais de saúde</footer>
+</article>
+{% endblock %}
