@@ -181,8 +181,8 @@ def r_mortalidade(p):
 
 
 def r_localidade(p):
-    bairros = _ativos("SELECT p.bairro, COUNT(*) t FROM pacientes p WHERE {ATIVO} GROUP BY 1 ORDER BY t DESC")
-    cidades = _ativos("SELECT p.cidade, COUNT(*) t FROM pacientes p WHERE {ATIVO} GROUP BY 1 ORDER BY t DESC")
+    bairros = _ativos("SELECT p.bairro, COUNT(*) t FROM pacientes p WHERE {ATIVO} GROUP BY p.bairro ORDER BY t DESC")
+    cidades = _ativos("SELECT p.cidade, COUNT(*) t FROM pacientes p WHERE {ATIVO} GROUP BY p.cidade ORDER BY t DESC")
     return {
         "filtros": [("Base", "Pacientes ativos")],
         "resumo": [("Pacientes ativos", sum(r[1] for r in cidades)), ("Bairros", len(bairros)), ("Cidades", len(cidades))],
@@ -192,7 +192,7 @@ def r_localidade(p):
 
 def _analise_coluna(coluna: str, titulo: str, rotulo: str, vazio: str):
     def fn(p):
-        rows = _ativos(f"SELECT p.{coluna}, COUNT(*) t FROM pacientes p WHERE {{ATIVO}} GROUP BY 1 ORDER BY t DESC")
+        rows = _ativos(f"SELECT p.{coluna}, COUNT(*) t FROM pacientes p WHERE {{ATIVO}} GROUP BY p.{coluna} ORDER BY t DESC")
         nomes = _ativos(f"SELECT p.{coluna}, p.codigo, p.nome, p.servico, p.operadora FROM pacientes p WHERE {{ATIVO}} ORDER BY p.{coluna}, p.nome")
         return {
             "filtros": [("Base", "Pacientes ativos")],
@@ -233,11 +233,11 @@ def r_idade(p):
 
 
 def r_servico_operadora(p):
-    serv = _ativos("SELECT p.servico, COUNT(*) t FROM pacientes p WHERE {ATIVO} GROUP BY 1 ORDER BY t DESC")
-    oper = _ativos("SELECT p.operadora, COUNT(*) t FROM pacientes p WHERE {ATIVO} GROUP BY 1 ORDER BY t DESC")
+    serv = _ativos("SELECT p.servico, COUNT(*) t FROM pacientes p WHERE {ATIVO} GROUP BY p.servico ORDER BY t DESC")
+    oper = _ativos("SELECT p.operadora, COUNT(*) t FROM pacientes p WHERE {ATIVO} GROUP BY p.operadora ORDER BY t DESC")
     cruz = _ativos(
-        "SELECT COALESCE(NULLIF(p.servico,''),'Não informado'), COALESCE(NULLIF(p.operadora,''),'Não informada'), COUNT(*) "
-        "FROM pacientes p WHERE {ATIVO} GROUP BY 1, 2 ORDER BY 1, 3 DESC"
+        "SELECT s, o, COUNT(*) AS t FROM (SELECT COALESCE(NULLIF(p.servico,''),'Não informado') AS s, "
+        "COALESCE(NULLIF(p.operadora,''),'Não informada') AS o FROM pacientes p WHERE {ATIVO}) x GROUP BY s, o ORDER BY s, t DESC"
     )
     return {
         "filtros": [("Base", "Pacientes ativos")],

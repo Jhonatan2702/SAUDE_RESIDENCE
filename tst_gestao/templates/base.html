@@ -21,7 +21,8 @@
     {% if nivel >= 3 %}<span class="nav-sec">Configurações</span>
     <a href="{{ url_for('listas') }}" class="{{ 'on' if ativa == 'listas' }}">☰ Listas suspensas</a>{% endif %}
     {% if nivel >= 4 %}<a href="{{ url_for('usuarios') }}" class="{{ 'on' if ativa == 'usuarios' }}">🔐 Usuários e acessos</a>
-    <a href="{{ url_for('integracoes') }}" class="{{ 'on' if ativa == 'integracoes' }}">🔌 Integrações API</a>{% endif %}
+    <a href="{{ url_for('integracoes') }}" class="{{ 'on' if ativa == 'integracoes' }}">🔌 Integrações API</a>
+    <a href="{{ url_for('pagina_banco') }}" class="{{ 'on' if ativa == 'banco' }}">🗄️ Banco de dados</a>{% endif %}
   </nav>
   <div class="userbox">
     <a href="{{ url_for('perfil') }}" class="{{ 'on' if ativa == 'perfil' }}"><span class="avatar">{{ usuario['nome'][:1]|upper }}</span><span><b>{{ usuario['nome'] }}</b><small>{{ usuario['nivel']|capitalize }}</small></span></a>

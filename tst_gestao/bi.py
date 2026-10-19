@@ -53,8 +53,8 @@ def dashboard(ref_text: str | None, periodo_motivos: str) -> dict:
 
         ini, fim = periodos.get(periodo_motivos, periodos["mes"])
         motivos = conn.execute(
-            "SELECT COALESCE(NULLIF(motivo, ''), 'Não informado'), COUNT(*) AS t FROM movimentacao "
-            "WHERE evento IN ('Alta', 'Óbito') AND data BETWEEN ? AND ? GROUP BY 1 ORDER BY t DESC LIMIT 8",
+            "SELECT m, COUNT(*) AS t FROM (SELECT COALESCE(NULLIF(motivo, ''), 'Não informado') AS m FROM movimentacao "
+            "WHERE evento IN ('Alta', 'Óbito') AND data BETWEEN ? AND ?) x GROUP BY m ORDER BY t DESC LIMIT 8",
             (ini, fim),
         ).fetchall()
 
@@ -72,7 +72,7 @@ def dashboard(ref_text: str | None, periodo_motivos: str) -> dict:
 
         def grupo(coluna: str, limite: int | None = None) -> list[dict]:
             sql = (
-                f"SELECT {coluna}, COUNT(*) AS t FROM pacientes WHERE {ATIVO} GROUP BY 1 ORDER BY t DESC"
+                f"SELECT {coluna}, COUNT(*) AS t FROM pacientes WHERE {ATIVO} GROUP BY {coluna} ORDER BY t DESC"
                 + (f" LIMIT {limite}" if limite else "")
             )
             return _pairs(conn.execute(sql).fetchall())
@@ -97,8 +97,8 @@ def dashboard(ref_text: str | None, periodo_motivos: str) -> dict:
                     faixas[nome] += 1
 
         servico_operadora = conn.execute(
-            f"SELECT COALESCE(NULLIF(servico,''),'Não informado'), COALESCE(NULLIF(operadora,''),'Não informada'), "
-            f"COUNT(*) FROM pacientes WHERE {ATIVO} GROUP BY 1, 2 ORDER BY 3 DESC"
+            f"SELECT s, o, COUNT(*) AS t FROM (SELECT COALESCE(NULLIF(servico,''),'Não informado') AS s, "
+            f"COALESCE(NULLIF(operadora,''),'Não informada') AS o FROM pacientes WHERE {ATIVO}) x GROUP BY s, o ORDER BY t DESC"
         ).fetchall()
 
         return {

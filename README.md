@@ -33,6 +33,14 @@ Banco em `dados\tst_gestao.db` (faça backup copiando este arquivo). Erros de in
 - Anexos (operador+): documentos, exames, receitas, laudos, relatórios e outros (pdf, imagens, doc/docx, xls/xlsx, csv, txt; até 20 MB). Ficam em `dados\anexos\` — inclua essa pasta no backup junto com o `.db`.
 - Os tipos de registro e as categorias de anexo são editáveis em *Listas suspensas*.
 
+## Banco de dados (menu *Banco de dados*, somente Admin)
+Permite testar, criar a estrutura, migrar os dados e passar a usar **SQL Server** ou **Oracle** no lugar do SQLite.
+- SQL Server: requer ODBC Driver 17/18; o banco pode ser criado pela tela (inclui LocalDB `(localdb)\MSSQLLocalDB`).
+- Oracle: o usuário/schema precisa existir com permissão de criar tabelas (conexão direta, sem Oracle Client).
+- A migração preserva os códigos, confere as contagens e desfaz tudo em caso de erro. Anexos continuam em `dados\anexos`.
+- A configuração fica em `dados\banco.json` (senha protegida pelo Windows). Para voltar ao SQLite, apague esse arquivo.
+- Validado em SQL Server real (LocalDB); Oracle validado por testes de tradução de SQL/DDL.
+
 ## Testes
 `.venv\Scripts\python.exe -m pytest tests`
 

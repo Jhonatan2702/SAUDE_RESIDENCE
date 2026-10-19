@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block titulo %}Banco de dados{% endblock %}
+{% block cabecalho %}Banco de dados{% endblock %}
+{% block conteudo %}
+<div class="card">
+  <h3>Banco em uso <small>motor ativo e quantidade de registros</small></h3>
+  <div id="atual" class="muted">Carregando…</div>
+</div>
+
+<div class="card">
+  <h3>Novo destino <small>SQL Server ou Oracle · a senha é guardada protegida (Windows DPAPI)</small></h3>
+  <form id="f-banco" class="form-grid" autocomplete="off">
+    <label>Motor
+      <select id="b-motor">{% for k, v in motores.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select>
+    </label>
+    <div id="aviso-lib" class="alert hidden span2"></div>
+
+    <label class="g-sqlite span2">Arquivo (opcional)<input id="b-arquivo" placeholder="Padrão: dados\tst_gestao.db"></label>
+
+    <label class="g-rede">Servidor<input id="b-servidor" placeholder="localhost  ou  (localdb)\MSSQLLocalDB"></label>
+    <label class="g-rede">Porta<input id="b-porta" placeholder="1433 / 1521"></label>
+    <label class="g-ss">Nome do banco<input id="b-banco" placeholder="tst_gestao"></label>
+    <label class="g-ss">Autenticação
+      <select id="b-auth"><option value="windows">Windows (usuário atual)</option><option value="sql">Usuário e senha do SQL Server</option></select>
+    </label>
+    <label class="g-ss">Driver ODBC<select id="b-driver"></select></label>
+    <label class="g-or">Serviço (service name)<input id="b-servico" placeholder="ORCLPDB1"></label>
+    <label class="g-or">DSN completo (opcional)<input id="b-dsn" placeholder="host:1521/servico"></label>
+    <label class="g-cred">Usuário<input id="b-usuario"></label>
+    <label class="g-cred">Senha<input id="b-senha" type="password" placeholder="(em branco = manter a salva)"></label>
+    <div class="g-ss span2 row">
+      <label class="inline"><input type="checkbox" id="b-cript" style="width:auto"> Criptografar conexão</label>
+      <label class="inline"><input type="checkbox" id="b-confiar" checked style="width:auto"> Confiar no certificado do servidor</label>
+      <label class="inline"><input type="checkbox" id="b-criar" style="width:auto"> Criar o banco se não existir</label>
+    </div>
+  </form>
+
+  <div class="row" style="margin-top:14px;flex-wrap:wrap;gap:10px">
+    <button class="btn" id="bt-testar" type="button">🔌 Testar conexão</button>
+    <button class="btn" id="bt-ativar" type="button">✅ Apenas ativar</button>
+    <button class="btn primary" id="bt-migrar" type="button">🚚 Criar estrutura e migrar dados</button>
+  </div>
+  <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:16px">
+    <label class="inline"><input type="checkbox" id="b-ativar-fim" checked style="width:auto"> Ativar ao concluir a migração</label>
+    <label class="inline"><input type="checkbox" id="b-apagar" style="width:auto"> Apagar dados existentes no destino</label>
+  </div>
+  <div id="resultado" class="alert hidden" style="margin-top:14px"></div>
+</div>
+
+<div class="card">
+  <h3>Observações</h3>
+  <ul class="muted" style="line-height:1.7">
+    <li>A migração copia todas as tabelas preservando os códigos e confere as contagens; em caso de erro nada é gravado no destino.</li>
+    <li>Oracle: o usuário (schema) precisa existir e ter permissão de criar tabelas. No SQL Server o banco pode ser criado aqui.</li>
+    <li>Arquivos anexados continuam na pasta <code>dados\anexos</code> deste computador.</li>
+    <li>Para voltar ao SQLite: apague <code>dados\banco.json</code> ou use o motor SQLite acima e ative.</li>
+  </ul>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='banco.js') }}"></script>
+{% endblock %}

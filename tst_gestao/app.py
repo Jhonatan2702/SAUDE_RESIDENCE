@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import secrets
-import sqlite3
 import uuid
 from datetime import date, datetime
 from functools import wraps
@@ -14,7 +13,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from . import bi
 from . import relatorios as rel
 from . import integracoes as ig
-from .db import DATA_DIR, EVENTOS, LISTAS, NIVEIS, connect, init_db
+from . import banco
+from .db import DATA_DIR, EVENTOS, LISTAS, NIVEIS, ErroIntegridade, connect, garantir_opcao, init_db
 
 ANEXOS_DIR = DATA_DIR / "anexos"
 MAX_UPLOAD = 20_000_000
@@ -185,7 +185,7 @@ def create_app() -> Flask:
         if request.method == "POST":
             with connect() as conn:
                 u = conn.execute(
-                    "SELECT * FROM usuarios WHERE usuario = ? AND ativo = 1", (request.form.get("usuario", "").strip(),)
+                    "SELECT * FROM usuarios WHERE LOWER(usuario) = LOWER(?) AND ativo = 1", (request.form.get("usuario", "").strip(),)
                 ).fetchone()
             if u and check_password_hash(u["senha_hash"], request.form.get("senha", "")):
                 session.clear()
@@ -414,7 +414,7 @@ def create_app() -> Flask:
         if lista not in LISTAS or not valor:
             return jsonify(erro="Informe um valor válido."), 400
         with connect() as conn:
-            conn.execute("INSERT OR IGNORE INTO opcoes (lista, valor) VALUES (?, ?)", (lista, valor))
+            garantir_opcao(conn, lista, valor)
         return jsonify(ok=True)
 
     @app.delete("/api/opcoes/<lista>")
@@ -460,6 +460,8 @@ def create_app() -> Flask:
                     date.fromisoformat(v)
                 except ValueError:
                     abort(400, f'{c["rotulo"]}: data inválida.')
+            elif c["tipo"] in ("text", "select") and (lim := banco.limite(e["tabela"], c["nome"])) and len(v) > lim:
+                abort(400, f'{c["rotulo"]}: máximo de {lim} caracteres.')
             elif c["tipo"] == "month" and not (len(v) == 7 and v[4] == "-" and v[:4].isdigit() and v[5:].isdigit()):
                 abort(400, f'{c["rotulo"]}: mês inválido.')
             out[c["nome"]] = v
@@ -549,7 +551,7 @@ def create_app() -> Flask:
         try:
             with connect() as conn:
                 novo_id = gravar(conn, ent, dados, registro_id)
-        except sqlite3.IntegrityError:
+        except ErroIntegridade:
             msg = "Já existe um paciente com este código." if ent == "pacientes" else "Já existe registro para este paciente, terapia e mês."
             return jsonify(erro=msg), 409
         ig.notificar(WEBHOOK_EVENTO[ent][registro_id is not None], {**dados, "id": novo_id})
@@ -563,7 +565,7 @@ def create_app() -> Flask:
         where, params = [], []
         q = request.args.get("q", "").strip()
         if q:
-            where.append("(" + " OR ".join(f"{c} LIKE ?" for c in e["busca"]) + ")")
+            where.append("(" + " OR ".join(f"LOWER({c}) LIKE LOWER(?)" for c in e["busca"]) + ")")
             params += [f"%{q}%"] * len(e["busca"])
         if e.get("filtro_mes") and request.args.get("mes"):
             where.append("mes = ?")
@@ -644,7 +646,7 @@ def create_app() -> Flask:
                     if not conn.execute("SELECT 1 FROM usuarios WHERE nivel='admin' AND ativo=1").fetchone():
                         conn.rollback()
                         return jsonify(erro="Deve existir ao menos um administrador ativo."), 400
-        except sqlite3.IntegrityError:
+        except ErroIntegridade:
             return jsonify(erro="Este nome de usuário já existe."), 409
         return jsonify(ok=True)
 
@@ -702,7 +704,7 @@ def create_app() -> Flask:
         for c in e["campos"]:
             lista = c.get("lista")
             if lista and not lista.startswith("@") and dados.get(c["nome"]):
-                conn.execute("INSERT OR IGNORE INTO opcoes (lista, valor) VALUES (?, ?)", (lista, dados[c["nome"]]))
+                garantir_opcao(conn, lista, dados[c["nome"]])
         return acao, rid, dados
 
     def processar(ent: str, linhas: list[dict]) -> dict:
@@ -717,7 +719,7 @@ def create_app() -> Flask:
                 except HTTPException as exc:
                     res["erros"].append({"linha": i, "erro": exc.description})
                     continue
-                except sqlite3.IntegrityError:
+                except ErroIntegridade:
                     res["erros"].append({"linha": i, "erro": "Conflito de unicidade."})
                     continue
                 res[{"criado": "criados", "atualizado": "atualizados", "ignorado": "ignorados"}[acao]] += 1
@@ -779,7 +781,7 @@ def create_app() -> Flask:
                 where.append("data <= ?")
                 params.append(request.args["ate"])
         if request.args.get("q"):
-            where.append("(" + " OR ".join(f"{c} LIKE ?" for c in e["busca"]) + ")")
+            where.append("(" + " OR ".join(f"LOWER({c}) LIKE LOWER(?)" for c in e["busca"]) + ")")
             params += [f'%{request.args["q"]}%'] * len(e["busca"])
         try:
             limite = max(1, min(int(request.args.get("limit", 100)), 1000))
@@ -912,5 +914,91 @@ def create_app() -> Flask:
             abort(404)
         ok, resultado = ig.testar(h)
         return jsonify(ok=ok, resultado=resultado)
+
+    # ---------- banco de dados (SQLite / SQL Server / Oracle) ----------
+    def _msg(exc: Exception) -> str:
+        args = getattr(exc, "args", ())
+        return str(args[1] if len(args) > 1 and isinstance(args[1], str) else exc)
+
+    def _cfg_do_corpo():
+        d = request.get_json(silent=True) or {}
+        return d, banco.normalizar_cfg(d.get("cfg") or {}, banco.ler_config())
+
+    def _ativar(cfg: dict) -> bool:
+        """Passa a usar `cfg` (cria estrutura/listas se faltarem). Retorna True se a sessão atual foi invalidada."""
+        anterior = banco.ler_config()
+        banco.gravar_config(cfg)
+        try:
+            init_db()
+        except Exception:
+            banco.gravar_config(anterior)
+            raise
+        with connect() as conn:
+            ainda = conn.execute("SELECT 1 FROM usuarios WHERE id = ? AND ativo = 1", (session.get("uid"),)).fetchone()
+        if not ainda:
+            session.clear()
+        return not ainda
+
+    @app.route("/banco")
+    @exige("admin")
+    def pagina_banco():
+        return render_template("banco.html", ativa="banco", motores=banco.MOTORES)
+
+    @app.get("/api/banco")
+    @exige("admin")
+    def api_banco_estado():
+        cfg = banco.ler_config()
+        try:
+            with connect() as conn:
+                info = {"versao": banco.versao(conn), "tabelas": banco.contagens(conn)}
+        except Exception as exc:
+            info = {"erro": _msg(exc)}
+        try:
+            import pyodbc  # noqa: F401
+            tem_pyodbc = True
+        except ImportError:
+            tem_pyodbc = False
+        try:
+            import oracledb  # noqa: F401
+            tem_oracle = True
+        except ImportError:
+            tem_oracle = False
+        return jsonify(cfg=banco.cfg_publica(cfg), atual=info, drivers=banco.drivers_sqlserver(),
+                       bibliotecas={"sqlserver": tem_pyodbc, "oracle": tem_oracle},
+                       arquivo_padrao=str(banco.DB_PATH))
+
+    @app.post("/api/banco/testar")
+    @exige("admin")
+    def api_banco_testar():
+        try:
+            d, cfg = _cfg_do_corpo()
+            return jsonify(ok=True, **banco.testar(cfg, criar_banco=bool(d.get("criar_banco"))))
+        except Exception as exc:
+            return jsonify(erro=_msg(exc)), 400
+
+    @app.post("/api/banco/migrar")
+    @exige("admin")
+    def api_banco_migrar():
+        try:
+            d, cfg = _cfg_do_corpo()
+            if d.get("criar_banco") and cfg["motor"] == "sqlserver":
+                banco.criar_banco_sqlserver(cfg)
+            res = banco.migrar(banco.ler_config(), cfg, apagar_destino=bool(d.get("apagar_destino")))
+            relogin = _ativar(cfg) if d.get("ativar") else False
+            return jsonify(ok=True, ativado=bool(d.get("ativar")), relogin=relogin, **res)
+        except Exception as exc:
+            return jsonify(erro=_msg(exc)), 400
+
+    @app.post("/api/banco/ativar")
+    @exige("admin")
+    def api_banco_ativar():
+        try:
+            d, cfg = _cfg_do_corpo()
+            if d.get("criar_banco") and cfg["motor"] == "sqlserver":
+                banco.criar_banco_sqlserver(cfg)
+            banco.testar(cfg)
+            return jsonify(ok=True, relogin=_ativar(cfg))
+        except Exception as exc:
+            return jsonify(erro=_msg(exc)), 400
 
     return app
