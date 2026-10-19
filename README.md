@@ -2,6 +2,9 @@
 
 Sistema de gestão local (Flask + SQLite) com login, níveis de acesso, cadastros e painel BI.
 
+## Instalação (para quem baixar o projeto)
+Dê duplo clique em **`install.bat`**: ele localiza (ou instala via winget) o Python 3.10+, cria o ambiente `.venv`, instala as dependências e cria os atalhos **TST-GESTÃO** na Área de Trabalho. Requer Windows e internet na primeira vez.
+
 ## Uso
 - Dê duplo clique no atalho **TST-GESTÃO** (Área de Trabalho ou pasta do projeto). Nenhum terminal é aberto.
 - O ícone aparece na bandeja do Windows (clique duplo = abrir, botão direito = Sair).
