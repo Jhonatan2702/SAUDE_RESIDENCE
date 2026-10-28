@@ -8,6 +8,8 @@
   const SEQ = ['azul', 'agua', 'roxo', 'laranja', 'rosa', 'verde', 'navy'];
   const corTer = (t, i) => TERAPIA[String(t).toUpperCase()] || SEQ[i % SEQ.length];
   const charts = {};
+  const filtroAtual = {tipo: null, valor: null};
+  const filtroNomes = {bairro: 'Bairro', cidade: 'Cidade', complexidade: 'Complexidade', diagnostico: 'Diagnóstico', servico: 'Serviço', operadora: 'Operadora', terapia: 'Terapia', profissional: 'Profissional'};
   const refEl = document.getElementById('ref'), perEl = document.getElementById('per-mot');
   const fonte = getComputedStyle(document.body).fontFamily;
   Object.assign(Chart.defaults, {color: '#64748b'});
@@ -84,6 +86,26 @@
   }
 
   const semInfo = l => /^(não|sem) informa/i.test(l);
+  function selecionarFiltro(tipo, valor) {
+    if (!tipo || valor == null) return;
+    filtroAtual.tipo = filtroAtual.tipo === tipo && filtroAtual.valor === valor ? null : tipo;
+    filtroAtual.valor = filtroAtual.tipo ? valor : null;
+    atualizarFiltro();
+    carregar().catch(e => toast(e.message, true));
+  }
+  function atualizarFiltro() {
+    const box = document.getElementById('bi-filtro-ativo');
+    if (!filtroAtual.tipo) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = `Filtro: <b>${esc(filtroNomes[filtroAtual.tipo] || filtroAtual.tipo)} = ${esc(filtroAtual.valor)}</b>` +
+      '<button type="button" aria-label="Limpar filtro">Limpar</button>';
+    box.querySelector('button').onclick = () => { filtroAtual.tipo = filtroAtual.valor = null; atualizarFiltro(); carregar().catch(e => toast(e.message, true)); };
+  }
+  function filtroId(id) {
+    return { 'l-bairro': 'bairro', 'l-cidade': 'cidade', 'l-oper': 'operadora', 'l-serv': 'servico',
+      'l-pend': 'terapia',
+      'c-cx': 'complexidade', 'l-diag': 'diagnostico' }[id];
+  }
   function barras(id, dados, cor = 'azul', horiz = false, opt = {}) {
     if (opt.aviso && aviso(id, dados, opt.aviso)) return;
     const cores = dados.map((d, i) => (semInfo(d.label) ? G.cinza : opt.porItem ? G[corTer(d.label, i)] : G[cor]));
@@ -95,6 +117,7 @@
       options: {
         indexAxis: horiz ? 'y' : 'x', responsive: true, maintainAspectRatio: false,
         layout: {padding: horiz ? {right: 36} : {top: 24}}, plugins: {legend: {display: false}},
+        onClick: (_event, els) => { if (els.length && opt.filtro) selecionarFiltro(opt.filtro, dados[els[0].index].label); },
         scales: {
           [horiz ? 'x' : 'y']: {display: !horiz, beginAtZero: true, grace: '10%', grid: {color: '#eef2f7'}, border: {display: false}, ticks: {precision: 0}},
           [horiz ? 'y' : 'x']: {grid: {display: false}, border: {display: false}, ticks: {color: '#334155', font: {weight: 600}, autoSkip: false}},
@@ -114,6 +137,13 @@
         plugins: {rotulos: {centro: centro || [fmt(total), 'PACIENTES']},
           legend: {display: !opt.semLegenda, position: 'bottom', labels: {usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: 12, color: '#0f172a', font: {size: 11.5}}},
           tooltip: {callbacks: {label: c => ` ${c.label}: ${fmt(c.raw)} (${pct(c.raw * 100 / (total || 1))})`}}}},
+      plugins: [{
+        id: 'filtroRosca',
+        afterInit: ch => { if (opt.filtro) ch.canvas.onclick = event => {
+          const pontos = ch.getElementsAtEventForMode(event, 'nearest', {intersect: true}, true);
+          if (pontos.length) selecionarFiltro(opt.filtro, dados[pontos[0].index].label);
+        }; },
+      }],
     });
   }
 
@@ -171,7 +201,8 @@
     const itens = dados.filter(d => d.total > 0 || opt.zeros);
     const html = itens.slice(0, max).map((d, i) => {
       const par = semInfo(d.label) ? G.cinza : opt.porItem ? G[corTer(d.label, i)] : G[cor];
-      return `<div class="pl-i ${semInfo(d.label) ? 'cinza' : ''}" style="--c0:${par[0]};--c:${par[1]}"><span title="${esc(d.label)}">${esc(d.label)}</span>` +
+      const tipo = filtroId(id);
+      return `<div class="pl-i ${semInfo(d.label) ? 'cinza' : ''}" ${tipo ? `data-filtro="${esc(tipo)}" data-valor="${esc(d.label)}"` : ''} style="--c0:${par[0]};--c:${par[1]}"><span title="${esc(d.label)}">${esc(d.label)}</span>` +
         `<em><b>${fmt(d.total)}</b>${opt.semPct ? '' : pct(total ? d.total * 100 / total : 0)}</em><div class="pl-b"><i style="width:${d.total * 100 / maior}%"></i></div></div>`;
     }).join('');
     const resto = itens.length - max;
@@ -189,6 +220,7 @@
     ];
     // o que falta para chegar a 100% — é o número que pede ação
     const FALTA = ['não estão ativas', 'sem agendamento', 'sem relatório', 'com cadastro incompleto'];
+    const TIPO = ['ativas', 'agendadas', 'relatorios', 'cadastro'];
     const FUNDO = {azul: '#eff6ff', verde: '#f0fdf4', roxo: '#f5f3ff', laranja: '#fff7ed'};
     document.getElementById('aneis').innerHTML = itens.map(([c, t, v, base, calc], i) => {
       const falta = Math.max(0, (v.total || 0) - (v.parte || 0));
@@ -196,7 +228,7 @@
         `<div class="a-g"><canvas id="an${i}" width="72" height="72"></canvas><b>${Math.round(v.pct)}<small>%</small></b></div>` +
         `<div class="a-t"><h4>${t}<span class="info" tabindex="0" data-info="${esc(calc)}">${ic('info')}</span></h4>` +
         `<p><strong>${fmt(v.parte)}</strong> de ${fmt(v.total)} ${base}</p>` +
-        `<span class="a-falta ${falta ? '' : 'ok'}">${falta ? `${ic('aviso')}${fmt(falta)} ${FALTA[i]}` : `${ic('alta')}tudo em dia`}</span></div></div>`;
+        `<span class="a-falta ${falta ? '' : 'ok'}"${falta ? ` role="button" tabindex="0" style="cursor:pointer" data-falta="${TIPO[i]}" data-titulo="${esc(FALTA[i][0].toUpperCase() + FALTA[i].slice(1))}"` : ''}>${falta ? `${ic('aviso')}${fmt(falta)} ${FALTA[i]}` : `${ic('alta')}tudo em dia`}</span></div></div>`;
     }).join('');
     itens.forEach(([c, , v], i) => novo('an' + i, {
       type: 'doughnut',
@@ -300,7 +332,7 @@
     document.getElementById('prof-nota').textContent = rotuloMeses(d.evolucao.resumo_terapias);
     document.getElementById('prof-lista').innerHTML = lista.map((p, i) => {
       const ini = p.nome.split(' ').filter(w => w.length > 2).slice(0, 2).map(w => w[0]).join('').toUpperCase() || p.nome[0];
-      return `<div class="rk" style="--c:${cores[i % cores.length]}"><span class="pos">${i + 1}º</span><span class="av">${esc(ini)}</span>` +
+      return `<div class="rk" data-filtro="profissional" data-valor="${esc(p.nome)}" style="--c:${cores[i % cores.length]}"><span class="pos">${i + 1}º</span><span class="av">${esc(ini)}</span>` +
         `<div class="nm"><b>${esc(p.nome)}</b><small>${esc(p.terapias)}</small><div class="barra"><i style="width:${p.total * 100 / max}%"></i></div></div>` +
         `<div class="nt">${p.total}<small>terapias</small></div></div>`;
     }).join('') || '<div class="empty">Sem terapias com profissional no mês.</div>';
@@ -333,7 +365,8 @@
   aplicarPreset('mes');
 
   async function carregar() {
-    const d = await api(`/api/bi?ini=${iniEl.value}&fim=${fimEl.value}`);
+    const filtro = filtroAtual.tipo ? `&filtro_tipo=${encodeURIComponent(filtroAtual.tipo)}&filtro_valor=${encodeURIComponent(filtroAtual.valor)}` : '';
+    const d = await api(`/api/bi?ini=${iniEl.value}&fim=${fimEl.value}${filtro}`);
     const rot = rotuloPeriodo(d.periodo); document.getElementById('per-rotulo').textContent = rot[0].toUpperCase() + rot.slice(1);
     aviso.ativos = d.ativos; kpis(d); aneis(d); medidor(d); evolucao(d); situacao(d); terapiasMes(d); ranking(d);
     lista('l-pend', d.pendencias, 'laranja', {porItem: true, zeros: true, semPct: true});
@@ -342,10 +375,10 @@
     lista('l-cidade', d.cidades, 'agua');
     lista('l-oper', d.operadoras, 'roxo');
     lista('l-serv', d.servicos, 'laranja');
-    rosca('c-cx', d.complexidade.map(c => ({label: c.label, total: c.total})), null, {aviso: 'Complexidade'});
+    rosca('c-cx', d.complexidade.map(c => ({label: c.label, total: c.total})), null, {aviso: 'Complexidade', filtro: 'complexidade'});
     barras('c-idade', d.idade.faixas, 'laranja', false, {aviso: 'Data de nascimento'});
     document.getElementById('idade-media').textContent = d.idade.media ? `média ${d.idade.media.toLocaleString('pt-BR')} anos` : '';
-    barras('c-diag', d.diagnosticos.slice(0, 10), 'verde', true, {aviso: 'Diagnóstico'});
+    barras('c-diag', d.diagnosticos.slice(0, 10), 'verde', true, {aviso: 'Diagnóstico', filtro: 'diagnostico'});
     const tot = d.servico_operadora.reduce((a, r) => a + r.total, 0);
     document.getElementById('so-total').textContent = `${fmt(tot)} pacientes ativos`;
     document.querySelector('#t-so tbody').innerHTML = d.servico_operadora.map(r => {
@@ -355,6 +388,73 @@
         `<div style="width:${p}%;height:100%;background:linear-gradient(90deg,#38bdf8,#2563eb);border-radius:99px"></div></div><span class="muted" style="width:48px;text-align:right">${pct(p)}</span></div></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">Sem dados.</td></tr>';
   }
+
+  document.addEventListener('click', e => {
+    const alvo = e.target.closest('[data-filtro][data-valor]');
+    if (!alvo) return;
+    selecionarFiltro(alvo.dataset.filtro, alvo.dataset.valor);
+    if (filtroAtual.tipo === 'terapia' && alvo.closest('#l-pend')) detalharTerapias('Pendências de ' + alvo.dataset.valor, `terapia=${encodeURIComponent(alvo.dataset.valor)}`);
+    else if (filtroAtual.tipo === 'profissional' && alvo.closest('#prof-lista')) detalharTerapias('Terapias de ' + alvo.dataset.valor, `profissional=${encodeURIComponent(alvo.dataset.valor)}`);
+  });
+
+  const COLS_TER = ['Mês', 'Código', 'Paciente', 'Modalidade', 'Terapia', 'Empresa', 'Profissional', 'Situação'];
+  async function detalhe(titulo, url, adapta, analise) {
+    const dlg = document.getElementById('dlg-pend'), corpo = document.getElementById('dlg-pend-b'), tit = document.getElementById('dlg-pend-t'), an = document.getElementById('dlg-pend-an');
+    tit.textContent = titulo;
+    an.classList.add('hidden'); an.innerHTML = '';
+    corpo.innerHTML = '<tr><td class="muted">Carregando…</td></tr>';
+    if (!dlg.open) dlg.showModal();
+    try {
+      const bruto = await api(url), {colunas, linhas} = adapta(bruto);
+      tit.textContent = `${titulo} · ${fmt(linhas.length)}`;
+      if (analise) { const h = analise(bruto); if (h) { an.innerHTML = h; an.classList.remove('hidden'); } }
+      document.getElementById('dlg-pend-h').innerHTML = `<tr>${colunas.map(c => `<th>${esc(c)}</th>`).join('')}</tr>`;
+      corpo.innerHTML = linhas.map(l => `<tr>${l.map((v, i) => `<td${colunas[i] === 'Paciente' ? ' class="forte"' : ''}>${esc(v || '—')}</td>`).join('')}</tr>`).join('') ||
+        `<tr><td colspan="${colunas.length}" class="muted">Nenhum registro no período.</td></tr>`;
+    } catch (e) { dlg.close(); toast(e.message, true); }
+  }
+  const detalharTerapias = (titulo, query) => {
+    const prof = query.startsWith('profissional=');
+    return detalhe(titulo, `/api/bi/pendencias?${query}&ini=${iniEl.value}&fim=${fimEl.value}`,
+      itens => ({
+        colunas: prof ? [...COLS_TER, 'Bairro', 'Cidade'] : COLS_TER,
+        linhas: itens.map(i => [nomeMes(i.mes), i.codigo, i.paciente, i.modalidade, i.terapia, i.empresa, i.profissional || 'Sem profissional', i.situacao,
+          ...(prof ? [i.bairro, i.cidade] : [])]),
+      }), prof ? analiseBairros : null);
+  };
+  // bairros atendidos: pacientes distintos e terapias por bairro
+  function analiseBairros(itens) {
+    const mapa = new Map();
+    itens.forEach(i => {
+      const b = i.bairro || 'Não informado', m = mapa.get(b) || {pac: new Set(), ter: 0, cidade: i.cidade};
+      m.pac.add(i.codigo); m.ter++; mapa.set(b, m);
+    });
+    const lista = [...mapa].map(([b, m]) => ({b, pac: m.pac.size, ter: m.ter, cidade: m.cidade})).sort((a, c) => c.pac - a.pac || c.ter - a.ter || a.b.localeCompare(c.b));
+    if (!lista.length) return '';
+    const pacTotal = new Set(itens.map(i => i.codigo)).size, maior = lista[0].pac;
+    const barras = lista.slice(0, 10).map((x, i) => {
+      const par = x.b === 'Não informado' ? G.cinza : G.azul;
+      return `<div class="pl-i ${x.b === 'Não informado' ? 'cinza' : ''}" style="--c0:${par[0]};--c:${par[1]}"><span title="${esc(x.b)}${x.cidade ? ' · ' + esc(x.cidade) : ''}">${esc(x.b)}</span>` +
+        `<em><b>${fmt(x.pac)}</b>${x.pac === 1 ? 'paciente' : 'pacientes'} · ${fmt(x.ter)} ${x.ter === 1 ? 'terapia' : 'terapias'} · ${pct(x.pac * 100 / pacTotal)}</em><div class="pl-b"><i style="width:${x.pac * 100 / maior}%"></i></div></div>`;
+    }).join('');
+    const top = lista[0], cidades = new Set(itens.map(i => i.cidade).filter(Boolean)).size;
+    const resto = lista.length - 10;
+    return `<div style="margin:0 0 18px;padding:16px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc">` +
+      `<div style="display:flex;flex-wrap:wrap;gap:8px 24px;align-items:baseline;margin-bottom:12px"><b style="font-size:14px">Bairros atendidos</b>` +
+      `<span class="muted" style="font-size:12px">${fmt(lista.length)} ${lista.length === 1 ? 'bairro' : 'bairros'} · ${fmt(cidades)} ${cidades === 1 ? 'cidade' : 'cidades'} · ${fmt(pacTotal)} pacientes · mais atendido: <b>${esc(top.b)}</b> (${fmt(top.pac)})</span></div>` +
+      `<div class="plist" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:10px 28px">${barras}</div>` +
+      (resto > 0 ? `<div class="pl-mais">+ ${resto} outros bairros</div>` : '') + '</div>';
+  }
+  const detalharFaltas = (titulo, tipo) => {
+    const f = filtroAtual.tipo ? `&filtro_tipo=${encodeURIComponent(filtroAtual.tipo)}&filtro_valor=${encodeURIComponent(filtroAtual.valor)}` : '';
+    return detalhe(titulo, `/api/bi/faltas?tipo=${tipo}&ini=${iniEl.value}&fim=${fimEl.value}${f}`,
+      r => ({colunas: r.colunas, linhas: r.linhas.map(l => (l.length > 3 ? [nomeMes(l[0]), ...l.slice(1)] : l))}));
+  };
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-falta]');
+    if (b) detalharFaltas(b.dataset.titulo, b.dataset.falta);
+  });
+  document.getElementById('dlg-pend-x').onclick = () => document.getElementById('dlg-pend').close();
 
   // balão do ⓘ: um só, posicionado sobre a página (não é cortado pelos cards)
   const balao = document.createElement('div'); balao.className = 'balao'; document.body.append(balao);

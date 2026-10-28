@@ -13,7 +13,7 @@
     const p = D.paciente, ativo = !p.data_alta;
     const it = (r, v) => `<div><span>${r}</span><b>${esc(v || '—')}</b></div>`;
     $('ficha').innerHTML = `<div class="ficha-h"><div><h2>${esc(p.nome)}</h2><span class="muted">Código ${esc(p.codigo)}</span></div><span class="tag ${ativo ? '' : 'off'}">${ativo ? 'Ativo' : 'Alta em ' + fmtData(p.data_alta)}</span></div>
-      <div class="ficha-g">${it('Idade', idade(p.nascimento))}${it('Nascimento', fmtData(p.nascimento))}${it('Sexo', p.sexo)}${it('Bairro / Cidade', [p.bairro, p.cidade].filter(Boolean).join(' / '))}
+      <div class="ficha-g">${it('Idade', idade(p.nascimento))}${it('Nascimento', fmtData(p.nascimento))}${it('Sexo', p.sexo)}${it('Bairro / Cidade', [p.bairro, p.cidade].filter(Boolean).join(' / '))}${it('Endereço', p.endereco)}${it('Telefone', p.telefone)}
       ${it('Operadora', p.operadora)}${it('Diagnóstico', p.diagnostico)}${it('Complexidade', p.complexidade)}${it('Serviço', p.servico)}${it('Admissão', fmtData(p.data_admissao))}${it('Motivo da alta', p.motivo_alta)}</div>`;
   }
 

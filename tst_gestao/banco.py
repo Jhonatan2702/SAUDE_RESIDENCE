@@ -11,11 +11,16 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else Path(__file__).resolve().parent.parent
+)
 DATA_DIR = Path(os.environ.get("TST_DATA_DIR", BASE_DIR / "dados"))
 DB_PATH = DATA_DIR / "tst_gestao.db"
 CONFIG_PATH = DATA_DIR / "banco.json"
@@ -48,7 +53,7 @@ TABELAS: dict[str, dict] = {
         Col("trocar_senha", "int", nn=True, padrao="0")]),
     "pacientes": dict(cols=[
         ID, _t("codigo", 60, nn=True, unico=True), _t("nome", 200, nn=True), _t("nascimento", 20), _t("sexo", 10),
-        _t("bairro", 120), _t("cidade", 120), _t("operadora", 120), _t("diagnostico", 200), _t("complexidade", 60),
+        _t("bairro", 120), _t("cidade", 120), _t("endereco", 300), _t("telefone", 40), _t("operadora", 120), _t("diagnostico", 200), _t("complexidade", 60),
         _t("servico", 120), _t("data_admissao", 20), _t("data_alta", 20), _t("motivo_alta", 200)]),
     "terapias": dict(cols=[
         ID, _t("mes", 10, nn=True), _t("codigo_paciente", 60, nn=True), _t("terapia", 60, nn=True), _t("modalidade", 60),
@@ -510,6 +515,15 @@ def criar_estrutura(con: Conexao) -> list[str]:
         if nome not in existentes:
             con.raw.cursor().execute(ddl_tabela(nome, con.motor))
             criadas.append(nome)
+    for nome in ORDEM_TABELAS:
+        if nome in existentes and nome not in criadas:
+            cur = con.raw.cursor()
+            cur.execute(f"SELECT * FROM {nome} WHERE 1 = 0")
+            atuais = {d[0].lower() for d in cur.description}
+            for c in TABELAS[nome]["cols"]:
+                if c.nome not in atuais and not c.nn and not c.unico:
+                    kw = {"sqlite": "ADD COLUMN", "sqlserver": "ADD", "oracle": "ADD"}[con.motor]
+                    con.raw.cursor().execute(f"ALTER TABLE {nome} {kw} {_coluna_ddl(c, con.motor)}")
     idx = _existentes(con, "i")
     for nome, tabela, coluna in INDICES:
         if nome not in idx:

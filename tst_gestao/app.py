@@ -58,8 +58,10 @@ ENTIDADES = {
             {"nome": "nome", "rotulo": "Nome", "tipo": "text"},
             {"nome": "nascimento", "rotulo": "Nascimento", "tipo": "date"},
             {"nome": "sexo", "rotulo": "Sexo", "tipo": "select", "valores": ["F", "M"]},
+            {"nome": "endereco", "rotulo": "Endereço", "tipo": "text"},
             {"nome": "bairro", "rotulo": "Bairro", "tipo": "text"},
             {"nome": "cidade", "rotulo": "Cidade", "tipo": "text"},
+            {"nome": "telefone", "rotulo": "Telefone", "tipo": "text"},
             {"nome": "operadora", "rotulo": "Operadora", "tipo": "select", "lista": "operadoras"},
             {"nome": "diagnostico", "rotulo": "Diagnóstico", "tipo": "select", "lista": "diagnosticos"},
             {"nome": "complexidade", "rotulo": "Complexidade", "tipo": "select", "lista": "complexidades"},
@@ -390,7 +392,19 @@ def create_app() -> Flask:
     @app.get("/api/bi")
     def api_bi():
         a = request.args
-        return jsonify(bi.dashboard(a.get("ref"), a.get("periodo", "mes"), a.get("ini"), a.get("fim")))
+        return jsonify(bi.dashboard(a.get("ref"), a.get("periodo", "mes"), a.get("ini"), a.get("fim"),
+                                    a.get("filtro_tipo"), a.get("filtro_valor")))
+
+    @app.get("/api/bi/pendencias")
+    def api_bi_pendencias():
+        a = request.args
+        return jsonify(bi.pendencias_detalhe(a.get("terapia", ""), a.get("ini"), a.get("fim"), a.get("profissional")))
+
+    @app.get("/api/bi/faltas")
+    def api_bi_faltas():
+        a = request.args
+        return jsonify(bi.faltas_detalhe(a.get("tipo", ""), a.get("ini"), a.get("fim"),
+                                         a.get("filtro_tipo"), a.get("filtro_valor")))
 
     # ---------- API: opções ----------
     def todas_opcoes(conn) -> dict:

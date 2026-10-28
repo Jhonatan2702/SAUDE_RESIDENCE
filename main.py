@@ -8,13 +8,15 @@ import sys
 import threading
 import traceback
 import webbrowser
+import logging
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+RESOURCE_DIR = Path(getattr(sys, "_MEIPASS", BASE))
 BIND_HOST, PORT = "0.0.0.0", 8765
 LOCAL_HOST = "127.0.0.1"
 URL = f"http://{LOCAL_HOST}:{PORT}/"
-LOGO = BASE / "tst_gestao" / "static" / "logo.png"
+LOGO = RESOURCE_DIR / "tst_gestao" / "static" / "logo.png"
 
 
 def porta_em_uso() -> bool:
@@ -44,6 +46,18 @@ def registrar_erro() -> None:
         f.write(traceback.format_exc() + "\n")
 
 
+def configurar_log_servidor(app) -> None:
+    from tst_gestao.db import DATA_DIR
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    arquivo = DATA_DIR / "erro.log"
+    handler = logging.FileHandler(arquivo, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    app.logger.addHandler(handler)
+    app.logger.setLevel(logging.ERROR)
+    logging.getLogger("werkzeug").addHandler(handler)
+
+
 def main() -> None:
     if porta_em_uso():
         abrir_janela()
@@ -53,7 +67,9 @@ def main() -> None:
 
     from tst_gestao.app import create_app
 
-    servidor = make_server(BIND_HOST, PORT, create_app(), threaded=True)
+    app = create_app()
+    configurar_log_servidor(app)
+    servidor = make_server(BIND_HOST, PORT, app, threaded=True)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()
 
     import pystray

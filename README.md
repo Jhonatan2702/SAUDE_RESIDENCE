@@ -5,6 +5,9 @@ Sistema de gestão local (Flask + SQLite) com login, níveis de acesso, cadastro
 ## Instalação (para quem baixar o projeto)
 Dê duplo clique em **`install.bat`**: ele localiza (ou instala via winget) o Python 3.10+, cria o ambiente `.venv`, instala as dependências e cria os atalhos **TST-GESTÃO** na Área de Trabalho. Requer Windows e internet na primeira vez.
 
+## Gerar executável para Windows
+Execute **`build_exe.bat`** depois de instalar o projeto. O script cria um executável único em `dist\TST-GESTAO.exe`; Python não precisa estar instalado no computador que vai executar o arquivo. Para distribuição, envie o EXE (e opcionalmente um atalho para ele). O primeiro uso cria `dist\dados` ao lado do executável. Essa pasta contém o banco, configurações e anexos, portanto deve ser mantida e incluída nos backups; ela não é embutida no EXE. A geração exige internet para instalar o PyInstaller na primeira vez.
+
 ## Uso
 - Dê duplo clique no atalho **TST-GESTÃO** (Área de Trabalho ou pasta do projeto). Nenhum terminal é aberto.
 - O ícone aparece na bandeja do Windows (clique duplo = abrir, botão direito = Sair).

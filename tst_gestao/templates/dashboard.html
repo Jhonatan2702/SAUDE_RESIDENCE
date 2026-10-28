@@ -19,6 +19,7 @@
   </div>
 </header>
 <input type="hidden" id="ref" value="{{ hoje }}">
+<div id="bi-filtro-ativo" class="bi-filtro-ativo" hidden></div>
 {% endblock %}
 {# título do card: ícone, nome, ⓘ com o cálculo (passar o mouse), nota à direita e uma frase explicando o que o card mostra #}
 {% macro tit(icone, cor, texto, nota='', nota_id='', desc='', calculo='') %}<h3><span class="tt"><i class="hi {{ cor }}"><svg class="ic"><use href="#i-{{ icone }}"/></svg></i>{{ texto }}
@@ -30,7 +31,7 @@
 <section class="kpis" id="kpis"></section>
 <section class="aneis" id="aneis"></section>
 
-<section class="painel-g p-21">
+<section class="painel-g p-21 demais-evolucao">
   <div class="card">{{ tit('evolucao', 'azul', 'Evolução da carteira', 'últimos 8 meses',
       desc='A linha mostra quantos pacientes estavam ativos no fim de cada mês; as barras mostram quantos entraram, saíram por alta ou faleceram no mês.',
       calculo='Ativos no fim do mês = admitidos até o último dia do mês e sem alta até esse dia. Admissões, altas e óbitos vêm da tela Movimentação.') }}
@@ -42,7 +43,7 @@
     <div class="tiles" id="ter-tiles"></div></div>
 </section>
 
-<section class="painel-g p-12">
+<section class="painel-g p-12 demais-evolucao">
   <div class="card">{{ tit('situacao', 'roxo', 'Situação das terapias', nota_id='sit-nota',
       desc='Como estão as terapias lançadas no mês: ativas, a confirmar, pendentes, hospitalizado etc.',
       calculo='Contagem das terapias do mês de referência pelo campo Situação. O número no centro é a parte que está “Ativa”.') }}
@@ -53,7 +54,7 @@
     <div id="tm-info" class="tmi"></div></div>
 </section>
 
-<section class="painel-g p-3 topo">
+<section class="painel-g p-3 topo prioridade-lista">
   <div class="card">{{ tit('pendencia', 'ambar', 'Pendências por terapia', 'no período',
       desc='Terapias que ainda estão sem atendimento (situação “Pendente”), por tipo. Mostra onde falta profissional.',
       calculo='Terapias do mês atual com situação “Pendente” de pacientes ativos (sem data de alta).') }}<div class="plist" id="l-pend"></div></div>
@@ -66,22 +67,28 @@
       calculo='Quantidade de terapias do mês de referência em que o profissional está informado, de qualquer situação.') }}<div id="prof-lista" class="ranking"></div></div>
 </section>
 
-<section class="painel-g p-4 topo">
+<section class="painel-g p-4 topo prioridade-cadastro">
   <div class="card">{{ tit('bairro', 'azul', 'Bairros', 'top 10', desc='Onde moram os pacientes ativos.', calculo='Pacientes ativos agrupados pelo bairro do cadastro. O % é sobre o total de ativos.') }}<div class="plist" id="l-bairro"></div></div>
   <div class="card">{{ tit('cidade', 'agua', 'Cidades', desc='Cidades dos pacientes ativos.', calculo='Pacientes ativos agrupados pela cidade do cadastro. O % é sobre o total de ativos.') }}<div class="plist" id="l-cidade"></div></div>
   <div class="card">{{ tit('operadora', 'roxo', 'Operadoras', 'top 10', desc='Convênio que paga o atendimento de cada paciente ativo.', calculo='Pacientes ativos agrupados pela operadora do cadastro. O % é sobre o total de ativos.') }}<div class="plist" id="l-oper"></div></div>
   <div class="card">{{ tit('servico', 'laranja', 'Serviços', desc='Tipo de serviço contratado: monitoramento, internação domiciliar (ID), plantões (PL) etc.', calculo='Pacientes ativos agrupados pelo serviço do cadastro. O % é sobre o total de ativos.') }}<div class="plist" id="l-serv"></div></div>
 </section>
 
-<section class="painel-g p-3">
+<section class="painel-g p-3 prioridade-cadastro">
   <div class="card">{{ tit('complexidade', 'red', 'Complexidade', 'ativos', desc='Nível de cuidado exigido: básico, intermediário ou intensivo.', calculo='Pacientes ativos agrupados pelo campo Complexidade do cadastro.') }}<div class="chart" style="height:200px"><canvas id="c-cx"></canvas></div></div>
   <div class="card">{{ tit('idade', 'ambar', 'Faixa etária', nota_id='idade-media', desc='Idade dos pacientes ativos, em faixas.', calculo='Idade calculada pela data de nascimento do cadastro, na data de hoje.') }}<div class="chart" style="height:200px"><canvas id="c-idade"></canvas></div></div>
   <div class="card">{{ tit('diagnostico', 'verde', 'Diagnósticos', 'top 10', desc='Principais diagnósticos dos pacientes ativos.', calculo='Pacientes ativos agrupados pelo campo Diagnóstico do cadastro.') }}<div class="chart" style="height:200px"><canvas id="c-diag"></canvas></div></div>
 </section>
 
-<div class="card flush">{{ tit('tabela', 'azul', 'Serviço × operadora', nota_id='so-total', desc='Quantos pacientes ativos há em cada combinação de serviço e operadora — útil para negociação com os convênios.', calculo='Pacientes ativos agrupados por serviço e operadora. Participação = pacientes da linha ÷ total de ativos.') }}
+<div class="card flush demais-tabela">{{ tit('tabela', 'azul', 'Serviço × operadora', nota_id='so-total', desc='Quantos pacientes ativos há em cada combinação de serviço e operadora — útil para negociação com os convênios.', calculo='Pacientes ativos agrupados por serviço e operadora. Participação = pacientes da linha ÷ total de ativos.') }}
   <div class="table-wrap" style="max-height:380px"><table id="t-so"><thead><tr><th>Serviço</th><th>Operadora</th><th class="r">Pacientes</th><th style="width:38%">Participação</th></tr></thead><tbody></tbody></table></div></div>
 </div>
+<dialog id="dlg-pend" style="width:min(1180px,96vw)">
+  <h3 id="dlg-pend-t">Pendências</h3>
+  <div id="dlg-pend-an" class="hidden"></div>
+  <div class="table-wrap" style="max-height:55vh"><table><thead id="dlg-pend-h"></thead><tbody id="dlg-pend-b"></tbody></tbody></table></div>
+  <div style="margin-top:16px;text-align:right"><button type="button" class="btn ghost" id="dlg-pend-x">Fechar</button></div>
+</dialog>
 <select id="per-mot" class="hidden"><option value="dia">Dia</option><option value="mes" selected>Mês</option><option value="ano">Ano</option></select>
 {% endblock %}
 {% block scripts %}
