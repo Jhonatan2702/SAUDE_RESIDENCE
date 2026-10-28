@@ -69,6 +69,9 @@ def main() -> None:
 
     app = create_app()
     configurar_log_servidor(app)
+    from tst_gestao.integracoes import iniciar_sincronizacao_dadosbi
+
+    iniciar_sincronizacao_dadosbi(app.logger)
     servidor = make_server(BIND_HOST, PORT, app, threaded=True)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()
 

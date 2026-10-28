@@ -80,6 +80,13 @@ TABELAS: dict[str, dict] = {
     "webhook_log": dict(cols=[
         ID, Col("webhook_id", "int", nn=True), _t("evento", 100, nn=True), Col("ok", "int", nn=True),
         _t("resultado", 1000), _t("criado_em", 30, nn=True)]),
+    "dadosbi_visitas": dict(cols=[
+        ID, _t("origem_id", 40, nn=True, unico=True), _t("codigo_paciente", 60, nn=True),
+        Col("evolucao_id", "int", nn=True)]),
+    "dadosbi_status": dict(cols=[
+        ID, _t("ultima_execucao", 30), _t("ultima_sucesso", 30), _t("status", 20),
+        Col("pacientes_criados", "int"), Col("pacientes_atualizados", "int"), Col("visitas_importadas", "int"),
+        _t("erro", 200)]),
 }
 INDICES = [
     ("ix_evo_pac", "evolucoes", "codigo_paciente"), ("ix_anx_pac", "anexos", "codigo_paciente"),

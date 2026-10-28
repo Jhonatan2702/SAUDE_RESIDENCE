@@ -3,6 +3,14 @@
 {% block cabecalho %}Integrações API{% endblock %}
 {% block conteudo %}
 <div class="card">
+  <h3>Saúde Residence — dados BI <small>sincronização automática a cada hora</small></h3>
+  <p class="muted">Importa pacientes (ID da origem como código) e registra as visitas no prontuário. Os registros ausentes na resposta não são excluídos. A sincronização também pode ser iniciada manualmente.</p>
+  <div class="alert" style="background:#fff7ed;color:#9a3412;border-color:#fed7aa">A URL fornecida usa HTTP sem criptografia. Dados pessoais e de saúde podem trafegar sem proteção; solicite HTTPS ao responsável pela API e mantenha o acesso restrito à rede autorizada.</div>
+  <button id="dadosbi-sync" class="btn primary" type="button">Sincronizar agora</button>
+  <span id="dadosbi-status" class="muted" aria-live="polite">Carregando status…</span>
+</div>
+
+<div class="card">
   <h3>Chaves de API <small>entrada e saída · acesso somente nesta máquina (127.0.0.1:8765)</small></h3>
   <form id="f-chave" class="inline-form" style="margin-bottom:14px">
     <input id="ch-nome" placeholder="Nome (ex.: Sistema financeiro)" required>
@@ -70,6 +78,26 @@ curl -H "Authorization: Bearer SUA_CHAVE" http://127.0.0.1:8765/api/v1/pacientes
 const $ = id => document.getElementById(id);
 function bt(t, fn, cls = '') { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ghost sm ' + cls; b.textContent = t; b.style.marginLeft = '4px'; b.onclick = fn; return b; }
 
+function formatarSync(d) {
+  if (!d) return 'Ainda não sincronizado.';
+  const data = (d.ultima_execucao || '').replace('T', ' ');
+  const resumo = `${data} · ${d.pacientes_criados || 0} novos · ${d.pacientes_atualizados || 0} atualizados · ${d.visitas_importadas || 0} visitas`;
+  return d.erro ? `${resumo} · ${d.erro}` : resumo;
+}
+async function carregarDadosbi() {
+  try { $('dadosbi-status').innerHTML = esc(formatarSync(await api('/api/integracoes/dadosbi'))); }
+  catch (err) { $('dadosbi-status').textContent = err.message; }
+}
+$('dadosbi-sync').onclick = async () => {
+  const b = $('dadosbi-sync'); b.disabled = true; $('dadosbi-status').textContent = 'Sincronizando…';
+  try {
+    const r = await api('/api/integracoes/dadosbi/sincronizar', 'POST');
+    $('dadosbi-status').innerHTML = esc(formatarSync(r));
+    toast(r.erro || 'Sincronização concluída.', Boolean(r.erro));
+  } catch (err) { $('dadosbi-status').textContent = err.message; toast(err.message, true); }
+  finally { b.disabled = false; }
+};
+
 async function carregarChaves() {
   const rows = await api('/api/integracoes/chaves'), tb = $('tb-chaves'); tb.innerHTML = '';
   rows.forEach(k => {
@@ -126,6 +154,6 @@ $('f-imp').onsubmit = async e => {
   out.innerHTML = `<p><b>${d.total}</b> linhas · <b>${d.criados}</b> criadas · <b>${d.atualizados}</b> atualizadas · <b>${d.ignorados}</b> ignoradas · <b>${d.erros.length}</b> com erro</p>` +
     (d.erros.length ? '<div class="table-wrap" style="max-height:200px"><table><thead><tr><th>Linha</th><th>Erro</th></tr></thead><tbody>' + d.erros.slice(0, 200).map(x => `<tr><td>${x.linha + 1}</td><td>${esc(x.erro)}</td></tr>`).join('') + '</tbody></table></div>' : '');
 };
-carregarChaves(); carregarHooks();
+carregarDadosbi(); carregarChaves(); carregarHooks();
 </script>
 {% endblock %}

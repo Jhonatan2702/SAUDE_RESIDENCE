@@ -13,6 +13,7 @@ os.environ["TST_DATA_DIR"] = tempfile.mkdtemp()
 from openpyxl import Workbook  # noqa: E402
 
 from tst_gestao.app import create_app  # noqa: E402
+from tst_gestao import integracoes as ig  # noqa: E402
 
 
 def admin():
@@ -110,3 +111,53 @@ def test_importar_planilha_xlsx_e_csv():
     assert t["codigo_paciente"] == "101" and t["valor"] == 150.5 and t["mes"] == "2026-10"
     bad = a.post("/api/importar/pacientes", data={"file": (io.BytesIO(b"x"), "x.pdf")}, content_type="multipart/form-data")
     assert bad.status_code == 400
+
+
+def test_sincronizar_dadosbi_importa_pacientes_e_visitas_sem_duplicar(monkeypatch):
+    create_app()
+    payload = {
+        "sucesso": True,
+        "dados": [{
+            "id": "DADOSBI-TESTE-1",
+            "nmpaciente": "Paciente de teste BI",
+            "nmoperadora": "Operadora teste",
+            "nmservico": "Monitoramento",
+            "status": "EM ATENDIMENTO",
+            "dataadmissao": "22/08/2024",
+            "dataalta": None,
+            "condicaoalta": None,
+            "visitas": [{
+                "id": "DADOSBI-VISITA-TESTE-1",
+                "nmprofessional": "Profissional de teste",
+                "nmespecialidade": "Fisioterapia",
+                "datavisita": "15/10/2024",
+            }],
+        }],
+    }
+
+    class Resposta:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self, _limite):
+            return json.dumps(payload).encode()
+
+    monkeypatch.setattr(ig.urllib.request, "urlopen", lambda *_a, **_kw: Resposta())
+
+    primeiro = ig.sincronizar_dadosbi()
+    payload["dados"][0]["visitas"][0]["nmespecialidade"] = "Fisioterapia atualizada"
+    segundo = ig.sincronizar_dadosbi()
+    assert (primeiro["pacientes_criados"], primeiro["visitas_importadas"]) == (1, 1)
+    assert (segundo["pacientes_atualizados"], segundo["visitas_importadas"]) == (1, 0)
+    with ig.connect() as conn:
+        paciente = conn.execute("SELECT * FROM pacientes WHERE codigo = ?", ("DADOSBI-TESTE-1",)).fetchone()
+        visitas = conn.execute(
+            "SELECT e.* FROM evolucoes e JOIN dadosbi_visitas v ON v.evolucao_id = e.id WHERE v.origem_id = ?",
+            ("DADOSBI-VISITA-TESTE-1",),
+        ).fetchall()
+    assert paciente["data_admissao"] == "2024-08-22" and paciente["data_alta"] is None
+    assert len(visitas) == 1 and visitas[0]["tipo"] == "Visita"
+    assert "Fisioterapia atualizada" in visitas[0]["texto"]

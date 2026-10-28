@@ -32,6 +32,7 @@ Banco em `dados\tst_gestao.db` (faça backup copiando este arquivo). Erros de in
 - **Saída:** `GET /api/v1/pacientes|terapias|movimentacao` (filtros, `limit`/`offset`) e `GET /api/v1/indicadores`.
 - **Entrada:** `POST /api/v1/pacientes|terapias|movimentacao` (objeto ou lista, upsert) e `POST /api/v1/importar/<recurso>` (.xlsx/.csv). A tela também permite importar planilhas.
 - **Webhooks:** POST JSON assinado (`X-TST-Signature: sha256=HMAC`) nos eventos `paciente.criado/atualizado`, `terapia.criada/atualizada`, `movimentacao.criada`.
+- **Saúde Residence BI:** a aplicação sincroniza pacientes e visitas na inicialização e a cada hora; Admin também pode sincronizar pela tela. O ID externo vira o código local, e cada visita é registrada uma única vez como evolução do tipo “Visita”. Campos não fornecidos pela origem são preservados e pacientes ausentes na resposta não são excluídos. A URL padrão é a fornecida pela equipe; pode ser substituída pela variável `TST_DADOSBI_URL`. A URL atual usa HTTP sem criptografia: solicite HTTPS antes de transmitir dados pessoais/de saúde e restrinja o acesso à rede autorizada.
 - A aplicação escuta na rede local na porta `8765`. Exemplos completos na própria tela.
 
 ## Prontuário do paciente

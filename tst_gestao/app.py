@@ -854,6 +854,19 @@ def create_app() -> Flask:
     def integracoes():
         return render_template("integracoes.html", ativa="integracoes", eventos=ig.EVENTOS_WEBHOOK, entidades={k: v["titulo"] for k, v in ENTIDADES.items()})
 
+    @app.get("/api/integracoes/dadosbi")
+    @exige("admin")
+    def dadosbi_status():
+        return jsonify(ig.status_dadosbi())
+
+    @app.post("/api/integracoes/dadosbi/sincronizar")
+    @exige("admin")
+    def dadosbi_sincronizar():
+        try:
+            return jsonify(ig.sincronizar_dadosbi())
+        except RuntimeError as exc:
+            return jsonify(erro=str(exc)), 409 if "em andamento" in str(exc) else 502
+
     @app.get("/api/integracoes/chaves")
     @exige("admin")
     def chaves_listar():
