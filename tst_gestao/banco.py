@@ -83,14 +83,32 @@ TABELAS: dict[str, dict] = {
     "dadosbi_visitas": dict(cols=[
         ID, _t("origem_id", 40, nn=True, unico=True), _t("codigo_paciente", 60, nn=True),
         Col("evolucao_id", "int", nn=True)]),
+    "dadosbi_atendimentos": dict(cols=[
+        ID, _t("origem_id", 40, nn=True, unico=True), _t("nome_paciente", 200, nn=True),
+        _t("operadora_id", 40), _t("operadora", 120), _t("servico", 120), _t("status_origem", 60),
+        _t("data_admissao", 20), _t("data_alta", 20), _t("condicao_alta", 200),
+        _t("possui_terapias", 20), _t("inicio_orcamento", 20), _t("fim_orcamento", 20),
+        _t("sincronizado_em", 30, nn=True)]),
+    "dadosbi_visitas_origem": dict(cols=[
+        ID, _t("origem_id", 40, nn=True, unico=True), _t("atendimento_origem_id", 40, nn=True),
+        _t("profissional_id", 40), _t("profissional", 200), _t("especialidade", 200),
+        _t("data_visita", 20, nn=True), _t("sincronizado_em", 30, nn=True)]),
     "dadosbi_status": dict(cols=[
         ID, _t("ultima_execucao", 30), _t("ultima_sucesso", 30), _t("status", 20),
         Col("pacientes_criados", "int"), Col("pacientes_atualizados", "int"), Col("visitas_importadas", "int"),
-        _t("erro", 200)]),
+        _t("erro", 200), Col("atendimentos_criados", "int"), Col("atendimentos_atualizados", "int"),
+        Col("visitas_criadas", "int"), Col("visitas_atualizadas", "int")]),
+    "dadosbi_monitor": dict(cols=[
+        ID, Col("estrutura_json", "longo"), Col("categorias_json", "longo"),
+        Col("campos_monitorados", "int"), _t("ultima_verificacao", 30)]),
+    "dadosbi_alertas": dict(cols=[
+        ID, _t("tipo", 40, nn=True), _t("campo", 300, nn=True), _t("detalhe", 1000, nn=True),
+        _t("criado_em", 30, nn=True), _t("reconhecido_em", 30)]),
 }
 INDICES = [
     ("ix_evo_pac", "evolucoes", "codigo_paciente"), ("ix_anx_pac", "anexos", "codigo_paciente"),
     ("ix_mov_data", "movimentacao", "data"), ("ix_ter_mes", "terapias", "mes"),
+    ("ix_dbi_visita_atend", "dadosbi_visitas_origem", "atendimento_origem_id"),
 ]
 ORDEM_TABELAS = list(TABELAS)
 

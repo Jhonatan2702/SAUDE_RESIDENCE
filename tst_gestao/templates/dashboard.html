@@ -48,16 +48,16 @@
       desc='Como estão as terapias lançadas no mês: ativas, a confirmar, pendentes, hospitalizado etc.',
       calculo='Contagem das terapias do mês de referência pelo campo Situação. O número no centro é a parte que está “Ativa”.') }}
     <div class="rosca-l"><div class="chart" style="height:200px"><canvas id="c-sit"></canvas></div><div class="leg-v" id="sit-leg"></div></div></div>
-  <div class="card">{{ tit('sessoes', 'azul', 'Terapias por mês', 'últimos 8 meses',
-      desc='Cada coluna é um mês: o número na barra é o total de terapias lançadas; embaixo, a variação sobre o mês anterior e a divisão por tipo. A linha mostra a tendência.',
-      calculo='Contagem das linhas da tela Terapias por mês e por tipo de terapia (Fisio, Fono, Nutri, TO e Psico), nos meses até o fim do período selecionado.') }}
+  <div class="card">{{ tit('sessoes', 'azul', 'Pacientes por terapia', 'últimos 8 meses',
+      desc='Cada coluna mostra os pacientes distintos por tipo de terapia em cada mês; a linha mostra a tendência da soma por tipo.',
+      calculo='Contagem de pacientes distintos por mês e tipo de terapia (Fisio, Fono, Nutri, TO e Psico). Um mesmo paciente pode aparecer em mais de um tipo.') }}
     <div id="tm-info" class="tmi"></div></div>
 </section>
 
 <section class="painel-g p-3 topo prioridade-lista">
-  <div class="card">{{ tit('pendencia', 'ambar', 'Pendências por terapia', 'no período',
-      desc='Terapias que ainda estão sem atendimento (situação “Pendente”), por tipo. Mostra onde falta profissional.',
-      calculo='Terapias do mês atual com situação “Pendente” de pacientes ativos (sem data de alta).') }}<div class="plist" id="l-pend"></div></div>
+  <div class="card">{{ tit('pendencia', 'ambar', 'Pacientes com terapias pendentes', 'no período',
+      desc='Quantidade de pacientes ativos com terapia “Pendente”, por tipo de terapia.',
+      calculo='Pacientes distintos, sem alta, com terapia do tipo indicado em situação “Pendente” nos meses do período.') }}<div class="plist" id="l-pend"></div></div>
   <div class="card">{{ tit('motivos', 'verde', 'Motivos de alta',
       desc='Por que os pacientes saíram no período selecionado no topo da página.',
       calculo='Motivos registrados nos eventos de Alta e Óbito da Movimentação no período selecionado. “Não informado” = motivo em branco.') }}
@@ -65,6 +65,17 @@
   <div class="card">{{ tit('profissional', 'azul', 'Profissionais com mais terapias', nota_id='prof-nota',
       desc='Ranking dos profissionais que atendem mais terapias no mês, com a especialidade de cada um.',
       calculo='Quantidade de terapias do mês de referência em que o profissional está informado, de qualquer situação.') }}<div id="prof-lista" class="ranking"></div></div>
+</section>
+
+<section class="painel-g demais-evolucao">
+  <div class="card">{{ tit('profissional', 'azul', 'Disponibilidade de bairro por profissional', nota_id='disp-prof-nota',
+      desc='Bairros onde cada profissional possui pacientes com terapia cadastrada no período selecionado.',
+      calculo='Pacientes ativos distintos agrupados por profissional, terapia e bairro, considerando os registros de terapia nos meses selecionados. Indica cobertura observada nos cadastros, não disponibilidade de agenda.') }}
+    <div class="table-wrap" style="max-height:380px"><table id="t-prof-bairro">
+      <thead><tr><th>Profissional</th><th>Terapia</th><th>Bairro</th><th>Cidade</th><th class="r">Pacientes</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
 </section>
 
 <section class="painel-g p-4 topo prioridade-cadastro">
@@ -75,7 +86,7 @@
 </section>
 
 <section class="painel-g p-3 prioridade-cadastro">
-  <div class="card">{{ tit('complexidade', 'red', 'Complexidade', 'ativos', desc='Nível de cuidado exigido: básico, intermediário ou intensivo.', calculo='Pacientes ativos agrupados pelo campo Complexidade do cadastro.') }}<div class="chart" style="height:200px"><canvas id="c-cx"></canvas></div></div>
+  <div class="card">{{ tit('complexidade', 'red', 'Pacientes por complexidade', 'ativos', desc='Quantidade de pacientes ativos em cada nível: básico, intermediário ou intensivo.', calculo='Pacientes ativos agrupados pelo campo Complexidade do cadastro. Os três níveis são exibidos mesmo quando a quantidade é zero.') }}<div class="chart" style="height:200px"><canvas id="c-cx"></canvas></div></div>
   <div class="card">{{ tit('idade', 'ambar', 'Faixa etária', nota_id='idade-media', desc='Idade dos pacientes ativos, em faixas.', calculo='Idade calculada pela data de nascimento do cadastro, na data de hoje.') }}<div class="chart" style="height:200px"><canvas id="c-idade"></canvas></div></div>
   <div class="card">{{ tit('diagnostico', 'verde', 'Diagnósticos', 'top 10', desc='Principais diagnósticos dos pacientes ativos.', calculo='Pacientes ativos agrupados pelo campo Diagnóstico do cadastro.') }}<div class="chart" style="height:200px"><canvas id="c-diag"></canvas></div></div>
 </section>

@@ -141,7 +141,7 @@ def _evolucao(conn, ref: date, ini: date | None = None, filtro: tuple[str | None
         serie.append({"mes": mes, "ativos": ativos, "admissoes": ev.get("Admissão", 0), "altas": ev.get("Alta", 0), "obitos": ev.get("Óbito", 0)})
     ter: dict[str, dict] = {}
     for mes, terapia, total in conn.execute(
-            "SELECT t.mes, t.terapia, COUNT(*) FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente "
+            "SELECT t.mes, t.terapia, COUNT(DISTINCT t.codigo_paciente) FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente "
             "WHERE t.mes BETWEEN ? AND ?" + _filtro_terapia_sql(filtro_tipo, filtro_valor)[0] +
             " GROUP BY t.mes, t.terapia",
             (meses[0][0], meses[-1][0], *_filtro_terapia_sql(filtro_tipo, filtro_valor)[1])):
@@ -162,6 +162,15 @@ def _evolucao(conn, ref: date, ini: date | None = None, filtro: tuple[str | None
         p["total"] += 1
         p["terapias"].add(terapia)
     top = sorted(prof.values(), key=lambda p: (-p["total"], p["nome"]))[:8]
+    disponibilidade = conn.execute(
+        "SELECT t.profissional, t.terapia, COALESCE(NULLIF(p.bairro, ''), 'Não informado'), "
+        "COALESCE(NULLIF(p.cidade, ''), 'Não informada'), COUNT(DISTINCT t.codigo_paciente), COUNT(*) "
+        "FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente "
+        "WHERE t.mes BETWEEN ? AND ? AND t.profissional IS NOT NULL AND t.profissional <> '' "
+        "AND (p.data_alta IS NULL OR p.data_alta = '')" + _filtro_terapia_sql(filtro_tipo, filtro_valor)[0] +
+        " GROUP BY t.profissional, t.terapia, p.bairro, p.cidade ORDER BY t.profissional, p.bairro, t.terapia",
+        (m_ini, m_fim, *_filtro_terapia_sql(filtro_tipo, filtro_valor)[1]),
+    ).fetchall()
     resumo = conn.execute(
         "SELECT COUNT(*), COUNT(DISTINCT t.codigo_paciente), COALESCE(SUM(t.sessoes), 0), COALESCE(SUM(t.sessoes * t.valor), 0) "
         "FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente WHERE t.mes BETWEEN ? AND ?" +
@@ -179,6 +188,11 @@ def _evolucao(conn, ref: date, ini: date | None = None, filtro: tuple[str | None
         f"WHERE t.mes BETWEEN ? AND ? AND t.situacao = 'Ativa' AND (p.data_alta IS NULL OR p.data_alta = '')" +
         _filtro_terapia_sql(filtro_tipo, filtro_valor)[0],
         (m_ini, m_fim, *_filtro_terapia_sql(filtro_tipo, filtro_valor)[1])).fetchone()[0]
+    monitorados = conn.execute(
+        "SELECT COUNT(DISTINCT t.codigo_paciente) FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente "
+        "WHERE t.mes BETWEEN ? AND ? AND (p.data_alta IS NULL OR p.data_alta = '')" +
+        _filtro_terapia_sql(filtro_tipo, filtro_valor)[0],
+        (m_ini, m_fim, *_filtro_terapia_sql(filtro_tipo, filtro_valor)[1])).fetchone()[0]
     completos = conn.execute(
         f"SELECT COUNT(*) FROM pacientes WHERE {ATIVO} AND nascimento IS NOT NULL AND nascimento <> '' "
         "AND complexidade IS NOT NULL AND complexidade <> '' AND diagnostico IS NOT NULL AND diagnostico <> ''" +
@@ -186,6 +200,7 @@ def _evolucao(conn, ref: date, ini: date | None = None, filtro: tuple[str | None
     pct = lambda a, b: round((a or 0) * 100 / b, 1) if b else 0  # noqa: E731
     indicadores = {
         "terapias_ativas": {"pct": pct(taxas[1], taxas[0]), "parte": taxas[1] or 0, "total": taxas[0]},
+        "pacientes_monitorados": {"pct": pct(monitorados, ativos), "parte": monitorados, "total": ativos},
         "agendadas": {"pct": pct(taxas[2], taxas[0]), "parte": taxas[2] or 0, "total": taxas[0]},
         "relatorios": {"pct": pct(taxas[3], taxas[0]), "parte": taxas[3] or 0, "total": taxas[0]},
         "cadastro_completo": {"pct": pct(completos, ativos), "parte": completos, "total": ativos},
@@ -198,6 +213,10 @@ def _evolucao(conn, ref: date, ini: date | None = None, filtro: tuple[str | None
                          for t, v in sorted(ter.items(), key=lambda x: -sum(x[1].values()))],
         "situacao_terapias": _pairs(situacao),
         "profissionais": [{"nome": p["nome"], "total": p["total"], "terapias": " · ".join(sorted(p["terapias"]))} for p in top],
+        "disponibilidade_profissionais": [
+            {"profissional": r[0], "terapia": r[1], "bairro": r[2], "cidade": r[3], "pacientes": r[4], "terapias": r[5]}
+            for r in disponibilidade
+        ],
         "indicadores": indicadores,
         "resumo_terapias": {"mes": mes_ref, "mes_ini": m_ini, "mes_fim": m_fim, "terapias": resumo[0], "pacientes": resumo[1], "sessoes": resumo[2], "valor": round(resumo[3] or 0, 2)},
     }
@@ -227,6 +246,28 @@ def pendencias_detalhe(terapia: str, ini_text: str | None = None, fim_text: str 
         return [dict(zip(("mes", "codigo", "paciente", "terapia", "modalidade", "empresa", "profissional", "situacao", "bairro", "cidade"), r)) for r in rows]
 
 
+def obitos_detalhe(ini_text: str | None = None, fim_text: str | None = None,
+                    filtro_tipo: str | None = None, filtro_valor: str | None = None) -> list[dict]:
+    """Pacientes com evento de óbito registrado no período informado."""
+    hoje = date.today()
+    fim = _parse(fim_text, hoje)
+    ini = _parse(ini_text, fim)
+    if ini > fim:
+        ini, fim = fim, ini
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT m.data, p.codigo, p.nome, p.bairro, p.cidade, m.motivo "
+            "FROM movimentacao m JOIN pacientes p ON p.codigo = m.codigo_paciente "
+            "WHERE m.evento = 'Óbito' AND m.data BETWEEN ? AND ?" +
+            _filtro_sql(filtro_tipo, filtro_valor, "p")[0] + " ORDER BY m.data DESC, p.nome",
+            (ini.isoformat(), fim.isoformat(), *_filtro_sql(filtro_tipo, filtro_valor, "p")[1]),
+        ).fetchall()
+        return [
+            dict(zip(("data", "codigo", "paciente", "bairro", "cidade", "motivo"), row))
+            for row in rows
+        ]
+
+
 def _meses_periodo(ini_text: str | None, fim_text: str | None) -> tuple[str, str]:
     hoje = date.today()
     fim = _parse(fim_text, hoje)
@@ -238,7 +279,7 @@ def _meses_periodo(ini_text: str | None, fim_text: str | None) -> tuple[str, str
 
 def faltas_detalhe(tipo: str, ini_text: str | None = None, fim_text: str | None = None,
                    filtro_tipo: str | None = None, filtro_valor: str | None = None) -> dict:
-    """Itens que faltam para fechar 100% em cada indicador (terapias não ativas, sem agendamento, sem relatório, cadastro incompleto)."""
+    """Itens pendentes de monitoramento, terapias, agendamento, relatórios ou cadastro."""
     mes_de, mes_ate = _meses_periodo(ini_text, fim_text)
     with connect() as conn:
         if tipo == "cadastro":
@@ -252,6 +293,16 @@ def faltas_detalhe(tipo: str, ini_text: str | None = None, fim_text: str | None 
                 falta = [n for n, v in (("Nascimento", nasc), ("Complexidade", cx), ("Diagnóstico", diag)) if not v]
                 linhas.append([codigo, nome, ", ".join(falta)])
             return {"colunas": ["Código", "Paciente", "Falta preencher"], "linhas": linhas}
+        if tipo == "monitoramento":
+            sql_f, args_f = _filtro_sql(filtro_tipo, filtro_valor, "p")
+            rows = conn.execute(
+                f"SELECT p.codigo, p.nome, COALESCE(NULLIF(p.servico, ''), 'Não informado') "
+                f"FROM pacientes p WHERE {ATIVO}" + sql_f +
+                " AND NOT EXISTS (SELECT 1 FROM terapias t WHERE t.codigo_paciente = p.codigo "
+                "AND t.mes BETWEEN ? AND ?) ORDER BY p.nome",
+                (*args_f, mes_de, mes_ate),
+            ).fetchall()
+            return {"colunas": ["Código", "Paciente", "Serviço"], "linhas": [list(r) for r in rows]}
         cond = {
             "ativas": "COALESCE(t.situacao, '') <> 'Ativa'",
             "agendadas": "COALESCE(t.agendado, '') <> 'Sim'",
@@ -309,7 +360,7 @@ def dashboard(ref_text: str | None, periodo_motivos: str, ini_text: str | None =
         pendencias = {
             r[0]: r[1]
             for r in conn.execute(
-                "SELECT t.terapia, COUNT(*) FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente "
+                "SELECT t.terapia, COUNT(DISTINCT t.codigo_paciente) FROM terapias t JOIN pacientes p ON p.codigo = t.codigo_paciente "
                 "WHERE t.mes BETWEEN ? AND ? AND t.situacao = 'Pendente' AND (p.data_alta IS NULL OR p.data_alta = '') " +
                 _filtro_terapia_sql(filtro_tipo, filtro_valor)[0] +
                 "GROUP BY t.terapia",
@@ -326,7 +377,20 @@ def dashboard(ref_text: str | None, periodo_motivos: str, ini_text: str | None =
             )
             return _pairs(conn.execute(sql, _filtro_sql(filtro_tipo, filtro_valor)[1]).fetchall())
 
-        complexidade = grupo("complexidade")
+        contagem_cx = {"Básico": 0, "Intermediário": 0, "Intensivo": 0}
+        extras_cx: dict[str, int] = {}
+        equivalencias_cx = {
+            "basico": "Básico", "básico": "Básico",
+            "intermediario": "Intermediário", "intermediário": "Intermediário",
+            "intensivo": "Intensivo",
+        }
+        for item in grupo("complexidade"):
+            chave = item["label"].strip().casefold()
+            label = equivalencias_cx.get(chave, "Não informado" if chave in ("", "não informado") else "Outros")
+            destino = contagem_cx if label in contagem_cx else extras_cx
+            destino[label] = destino.get(label, 0) + item["total"]
+        complexidade = [{"label": label, "total": contagem_cx[label]} for label in contagem_cx]
+        complexidade.extend({"label": label, "total": total} for label, total in extras_cx.items() if total)
         total_cx = sum(i["total"] for i in complexidade)
         for item in complexidade:
             item["pct"] = round(item["total"] * 100 / total_cx, 1) if total_cx else 0

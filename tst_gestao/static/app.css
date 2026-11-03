@@ -197,6 +197,7 @@ canvas{max-height:440px}
 .kx{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;color:#fff;position:relative;overflow:hidden;
   background:linear-gradient(135deg,var(--c0),var(--c));box-shadow:0 10px 22px -10px var(--c),inset 0 1px 0 #ffffff33;transition:transform .15s,box-shadow .15s}
 .kx:hover{transform:translateY(-2px);box-shadow:0 14px 26px -10px var(--c)}
+.kx[data-acao]{cursor:pointer}.kx[data-acao]:focus-visible{outline:3px solid #0f172a;outline-offset:3px}
 .kx::after{content:"";position:absolute;right:-24px;bottom:-36px;width:96px;height:96px;border-radius:50%;background:#ffffff14}
 .kx .kx-ic{width:42px;height:42px;border-radius:50%;background:#ffffff2b;border:2px solid #ffffff59;display:grid;place-items:center;flex:none;box-shadow:inset 0 0 12px #ffffff1f}
 .kx .kx-ic .ic{width:19px;height:19px}

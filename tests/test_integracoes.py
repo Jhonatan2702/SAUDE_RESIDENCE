@@ -113,26 +113,48 @@ def test_importar_planilha_xlsx_e_csv():
     assert bad.status_code == 400
 
 
-def test_sincronizar_dadosbi_importa_pacientes_e_visitas_sem_duplicar(monkeypatch):
+def test_sincronizar_dadosbi_importa_atendimentos_e_visitas_sem_vincular_paciente(monkeypatch):
     create_app()
+    notificacoes = []
+    monkeypatch.setattr(ig, "notificar", lambda evento, dados: notificacoes.append((evento, dados)))
+    with ig.connect() as conn:
+        pacientes_antes = conn.execute("SELECT COUNT(*) FROM pacientes").fetchone()[0]
+        evolucoes_antes = conn.execute("SELECT COUNT(*) FROM evolucoes").fetchone()[0]
     payload = {
         "sucesso": True,
-        "dados": [{
-            "id": "DADOSBI-TESTE-1",
-            "nmpaciente": "Paciente de teste BI",
-            "nmoperadora": "Operadora teste",
-            "nmservico": "Monitoramento",
-            "status": "EM ATENDIMENTO",
-            "dataadmissao": "22/08/2024",
-            "dataalta": None,
-            "condicaoalta": None,
-            "visitas": [{
-                "id": "DADOSBI-VISITA-TESTE-1",
-                "nmprofessional": "Profissional de teste",
-                "nmespecialidade": "Fisioterapia",
-                "datavisita": "15/10/2024",
-            }],
-        }],
+        "dados": [
+            {
+                "id": "DADOSBI-TESTE-1",
+                "nmpaciente": "Paciente de teste BI",
+                "idoperadora": 4,
+                "nmoperadora": "Operadora teste",
+                "nmservico": "Monitoramento",
+                "status": "EM ATENDIMENTO",
+                "dataadmissao": "22/08/2024",
+                "datainicioorcamento": "01/10/2026",
+                "datafimorcamento": "01/11/2026",
+                "possuiterapias": "SIM",
+                "visitas": [{
+                    "id": "DADOSBI-VISITA-TESTE-1",
+                    "idadmission": "DADOSBI-TESTE-1",
+                    "idprofessional": 123,
+                    "nmprofessional": "Profissional de teste",
+                    "nmespecialidade": "Fisioterapia",
+                    "datavisita": "15/10/2024",
+                }],
+            },
+            {
+                "id": "DADOSBI-TESTE-2",
+                "nmpaciente": "Paciente de teste BI",
+                "nmoperadora": "Operadora teste",
+                "nmservico": "Visita Médica",
+                "status": "ALTA",
+                "dataadmissao": "19/01/2025",
+                "dataalta": "19/01/2025",
+                "condicaoalta": "Alta de procedimento(s)",
+                "visitas": [],
+            },
+        ],
     }
 
     class Resposta:
@@ -150,14 +172,36 @@ def test_sincronizar_dadosbi_importa_pacientes_e_visitas_sem_duplicar(monkeypatc
     primeiro = ig.sincronizar_dadosbi()
     payload["dados"][0]["visitas"][0]["nmespecialidade"] = "Fisioterapia atualizada"
     segundo = ig.sincronizar_dadosbi()
-    assert (primeiro["pacientes_criados"], primeiro["visitas_importadas"]) == (1, 1)
-    assert (segundo["pacientes_atualizados"], segundo["visitas_importadas"]) == (1, 0)
+    assert (primeiro["atendimentos_criados"], primeiro["visitas_criadas"]) == (2, 1)
+    assert (segundo["atendimentos_atualizados"], segundo["visitas_atualizadas"]) == (2, 1)
+    assert primeiro["alertas_esquema"] == 0 and segundo["alertas_esquema"] == 0
+    payload["dados"][0]["novoCampo"] = {"ativo": True}
+    payload["dados"][0]["status"] = 1
+    payload["dados"][0]["nmservico"] = "Novo serviço"
+    terceiro = ig.sincronizar_dadosbi()
+    assert terceiro["alertas_esquema"] >= 3
+    assert len(notificacoes) == 1 and notificacoes[0][0] == "dadosbi.esquema_alterado"
+    alertas = json.dumps(notificacoes[0][1], ensure_ascii=False)
+    assert "novoCampo" in alertas and "Novo serviço" in alertas and "number" in alertas
+    assert "Paciente de teste BI" not in alertas
     with ig.connect() as conn:
-        paciente = conn.execute("SELECT * FROM pacientes WHERE codigo = ?", ("DADOSBI-TESTE-1",)).fetchone()
+        pacientes = conn.execute("SELECT COUNT(*) FROM pacientes").fetchone()[0]
+        atendimentos = conn.execute(
+            "SELECT * FROM dadosbi_atendimentos ORDER BY origem_id"
+        ).fetchall()
         visitas = conn.execute(
-            "SELECT e.* FROM evolucoes e JOIN dadosbi_visitas v ON v.evolucao_id = e.id WHERE v.origem_id = ?",
+            "SELECT * FROM dadosbi_visitas_origem WHERE origem_id = ?",
             ("DADOSBI-VISITA-TESTE-1",),
         ).fetchall()
-    assert paciente["data_admissao"] == "2024-08-22" and paciente["data_alta"] is None
-    assert len(visitas) == 1 and visitas[0]["tipo"] == "Visita"
-    assert "Fisioterapia atualizada" in visitas[0]["texto"]
+        evolucoes = conn.execute("SELECT COUNT(*) FROM evolucoes").fetchone()[0]
+    assert pacientes == pacientes_antes and evolucoes == evolucoes_antes
+    assert len(atendimentos) == 2 and atendimentos[0]["data_admissao"] == "2024-08-22"
+    assert atendimentos[1]["data_alta"] == "2025-01-19"
+    assert len(visitas) == 1 and visitas[0]["atendimento_origem_id"] == "DADOSBI-TESTE-1"
+    assert visitas[0]["especialidade"] == "Fisioterapia atualizada"
+    cliente = admin()
+    monitor = cliente.get("/api/integracoes/dadosbi/monitor").get_json()
+    assert monitor["campos_monitorados"] > 0 and monitor["alertas_pendentes"] >= 3
+    alerta_id = next(a["id"] for a in monitor["alertas"] if a["campo"].endswith(".novoCampo"))
+    assert cliente.post(f"/api/integracoes/dadosbi/alertas/{alerta_id}/reconhecer").status_code == 200
+    assert cliente.post(f"/api/integracoes/dadosbi/alertas/{alerta_id}/reconhecer").status_code == 404

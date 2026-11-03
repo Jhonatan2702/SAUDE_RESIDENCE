@@ -6,11 +6,11 @@ import hashlib
 import hmac
 import io
 import json
+import os
 import re
 import secrets
 import threading
 import unicodedata
-import os
 import urllib.request
 from datetime import date, datetime
 from urllib.error import HTTPError, URLError
@@ -23,12 +23,15 @@ EVENTOS_WEBHOOK = [
     "terapia.criada",
     "terapia.atualizada",
     "movimentacao.criada",
+    "dadosbi.esquema_alterado",
 ]
 LIMITE_LINHAS = 5000
 DADOSBI_URL_PADRAO = "http://35.247.217.138:8081/SaudeResidenceHomeCareServices/ultron/dadosbi/lista/dadospaciente"
 DADOSBI_LIMITE_RESPOSTA = 25_000_000
 DADOSBI_LIMITE_REGISTROS = 20_000
+DADOSBI_LIMITE_VISITAS = 100_000
 DADOSBI_INTERVALO = 60 * 60
+DADOSBI_CATEGORIAS_MONITORADAS = {"status", "nmservico", "possuiterapias", "idoperadora", "nmoperadora"}
 _dadosbi_trava = threading.Lock()
 _dadosbi_execucao_trava = threading.Lock()
 _dadosbi_thread_iniciada = False
@@ -55,21 +58,19 @@ def _salvar_status_dadosbi(status: dict) -> None:
         atual = conn.execute("SELECT id FROM dadosbi_status ORDER BY id").fetchone()
         valores = (
             status.get("ultima_execucao"), status.get("ultima_sucesso"), status.get("status"),
-            status.get("pacientes_criados"), status.get("pacientes_atualizados"),
-            status.get("visitas_importadas"), status.get("erro"),
+            status.get("erro"), status.get("atendimentos_criados"), status.get("atendimentos_atualizados"),
+            status.get("visitas_criadas"), status.get("visitas_atualizadas"),
         )
         if atual:
             conn.execute(
-                "UPDATE dadosbi_status SET ultima_execucao=?, ultima_sucesso=?, status=?, "
-                "pacientes_criados=?, pacientes_atualizados=?, visitas_importadas=?, erro=? WHERE id=?",
+                "UPDATE dadosbi_status SET ultima_execucao=?, ultima_sucesso=?, status=?, erro=?, "
+                "atendimentos_criados=?, atendimentos_atualizados=?, visitas_criadas=?, visitas_atualizadas=? WHERE id=?",
                 (*valores, atual["id"]),
             )
         else:
             conn.execute(
-                "INSERT INTO dadosbi_status (ultima_execucao, ultima_sucesso, status, pacientes_criados, "
-                "pacientes_atualizados, visitas_importadas, erro) VALUES (?,?,?,?,?,?,?)",
-                valores,
-            )
+                "INSERT INTO dadosbi_status (ultima_execucao, ultima_sucesso, status, erro, atendimentos_criados, "
+                "atendimentos_atualizados, visitas_criadas, visitas_atualizadas) VALUES (?,?,?,?,?,?,?,?)", valores)
 
 
 def status_dadosbi() -> dict | None:
@@ -78,8 +79,133 @@ def status_dadosbi() -> dict | None:
     return dict(row) if row else None
 
 
+def _tipo_json(valor) -> str:
+    if valor is None:
+        return "null"
+    if isinstance(valor, bool):
+        return "boolean"
+    if isinstance(valor, (int, float)):
+        return "number"
+    if isinstance(valor, str):
+        return "string"
+    if isinstance(valor, dict):
+        return "object"
+    if isinstance(valor, list):
+        return "array"
+    return "unknown"
+
+
+def _esquema_e_categorias(payload) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    tipos: dict[str, set[str]] = {}
+    categorias: dict[str, set[str]] = {}
+
+    def percorrer(valor, caminho: str) -> None:
+        tipos.setdefault(caminho, set()).add(_tipo_json(valor))
+        if isinstance(valor, dict):
+            for chave, item in valor.items():
+                nome = str(chave)
+                filho = f"{caminho}.{nome}" if caminho else nome
+                if nome in DADOSBI_CATEGORIAS_MONITORADAS and isinstance(item, (str, int, float)) and not isinstance(item, bool):
+                    categoria = str(item).strip()
+                    if categoria and len(categoria) <= 120:
+                        categorias.setdefault(filho, set()).add(categoria)
+                percorrer(item, filho)
+        elif isinstance(valor, list):
+            for item in valor:
+                percorrer(item, f"{caminho}[]")
+
+    percorrer(payload, "")
+    return (
+        {c: sorted(ts) for c, ts in sorted(tipos.items())},
+        {c: sorted(vs, key=str.casefold) for c, vs in sorted(categorias.items())},
+    )
+
+
+def monitorar_esquema_dadosbi(payload) -> list[dict]:
+    """Compara estrutura e categorias públicas da resposta sem armazenar dados individuais."""
+    esquema, categorias = _esquema_e_categorias(payload)
+    agora = datetime.now().isoformat(timespec="seconds")
+    alertas: list[dict] = []
+    with connect() as conn:
+        anterior = conn.execute("SELECT * FROM dadosbi_monitor ORDER BY id").fetchone()
+        if anterior:
+            esquema_anterior = json.loads(anterior["estrutura_json"] or "{}")
+            categorias_anteriores = json.loads(anterior["categorias_json"] or "{}")
+            for campo, tipos in esquema.items():
+                if campo not in esquema_anterior:
+                    alertas.append({"tipo": "campo_novo", "campo": campo, "detalhe": f"Novo campo na resposta ({', '.join(tipos)})."})
+                    continue
+                tipos_novos = sorted(set(tipos) - set(esquema_anterior[campo]))
+                if tipos_novos:
+                    alertas.append({
+                        "tipo": "tipo_novo",
+                        "campo": campo,
+                        "detalhe": f"Novo tipo de valor: {', '.join(tipos_novos)}; tipos já vistos: {', '.join(esquema_anterior[campo])}.",
+                    })
+            for campo, valores in categorias.items():
+                novos = sorted(set(valores) - set(categorias_anteriores.get(campo, [])), key=str.casefold)
+                for valor in novos:
+                    alertas.append({
+                        "tipo": "categoria_nova",
+                        "campo": campo,
+                        "detalhe": f"Nova categoria: {valor[:120]}",
+                    })
+        if anterior:
+            conn.execute(
+                "UPDATE dadosbi_monitor SET estrutura_json=?, categorias_json=?, campos_monitorados=?, "
+                "ultima_verificacao=? WHERE id=?",
+                (json.dumps(esquema, ensure_ascii=False), json.dumps(categorias, ensure_ascii=False),
+                 len(esquema), agora, anterior["id"]),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO dadosbi_monitor (estrutura_json, categorias_json, campos_monitorados, ultima_verificacao) "
+                "VALUES (?,?,?,?)",
+                (json.dumps(esquema, ensure_ascii=False), json.dumps(categorias, ensure_ascii=False), len(esquema), agora),
+            )
+        for alerta in alertas:
+            conn.execute(
+                "INSERT INTO dadosbi_alertas (tipo, campo, detalhe, criado_em) VALUES (?,?,?,?)",
+                (alerta["tipo"], alerta["campo"][:300], alerta["detalhe"][:1000], agora),
+            )
+        conn.execute(
+            "DELETE FROM dadosbi_alertas WHERE reconhecido_em IS NOT NULL "
+            "AND id NOT IN (SELECT id FROM dadosbi_alertas WHERE reconhecido_em IS NOT NULL ORDER BY id DESC LIMIT 200)"
+        )
+    return alertas
+
+
+def listar_monitor_dadosbi() -> dict:
+    with connect() as conn:
+        monitor = conn.execute("SELECT * FROM dadosbi_monitor ORDER BY id").fetchone()
+        alertas = [dict(r) for r in conn.execute(
+            "SELECT id, tipo, campo, detalhe, criado_em, reconhecido_em FROM dadosbi_alertas "
+            "WHERE reconhecido_em IS NULL OR id IN "
+            "(SELECT id FROM dadosbi_alertas WHERE reconhecido_em IS NOT NULL ORDER BY id DESC LIMIT 50) "
+            "ORDER BY id DESC"
+        )]
+        pendentes = conn.execute(
+            "SELECT COUNT(*) FROM dadosbi_alertas WHERE reconhecido_em IS NULL"
+        ).fetchone()[0]
+    return {
+        "ultima_verificacao": monitor["ultima_verificacao"] if monitor else None,
+        "campos_monitorados": monitor["campos_monitorados"] if monitor else 0,
+        "alertas_pendentes": pendentes,
+        "alertas": alertas,
+    }
+
+
+def reconhecer_alerta_dadosbi(alerta_id: int) -> bool:
+    with connect() as conn:
+        cur = conn.execute(
+            "UPDATE dadosbi_alertas SET reconhecido_em=? WHERE id=? AND reconhecido_em IS NULL",
+            (datetime.now().isoformat(timespec="seconds"), alerta_id),
+        )
+    return cur.rowcount > 0
+
+
 def _sincronizar_dadosbi() -> dict:
-    """Busca pacientes e visitas na API Saúde Residence e importa sem duplicar visitas."""
+    """Sincroniza atendimentos e visitas sem tratá-los como pacientes do cadastro principal."""
     agora = datetime.now().isoformat(timespec="seconds")
     try:
         req = urllib.request.Request(url_dadosbi(), headers={"Accept": "application/json", "User-Agent": "TST-GESTAO/1"})
@@ -88,62 +214,81 @@ def _sincronizar_dadosbi() -> dict:
         if len(bruto) > DADOSBI_LIMITE_RESPOSTA:
             raise ValueError("Resposta da API excede o limite permitido.")
         payload = json.loads(bruto.decode("utf-8-sig"))
+        alertas_esquema = monitorar_esquema_dadosbi(payload)
+        if alertas_esquema:
+            notificar("dadosbi.esquema_alterado", {
+                "origem": "Saúde Residence BI",
+                "detectado_em": agora,
+                "alertas": alertas_esquema,
+            })
         registros = payload.get("dados") if isinstance(payload, dict) and payload.get("sucesso") is True else None
         if not isinstance(registros, list):
             raise ValueError("Formato de resposta não reconhecido.")
         if len(registros) > DADOSBI_LIMITE_REGISTROS:
             raise ValueError("Quantidade de registros excede o limite permitido.")
 
-        criados = atualizados = visitas_importadas = erros = 0
+        atendimentos_criados = atendimentos_atualizados = visitas_criadas = visitas_atualizadas = erros = 0
+        total_visitas = sum(
+            len(r.get("visitas") or []) for r in registros
+            if isinstance(r, dict) and isinstance(r.get("visitas") or [], list)
+        )
+        if total_visitas > DADOSBI_LIMITE_VISITAS:
+            raise ValueError("Quantidade de visitas excede o limite permitido.")
+
         with connect() as conn:
-            pacientes_validos = set()
+            atendimentos_validos = set()
             for registro in registros:
                 try:
                     if not isinstance(registro, dict) or registro.get("id") in (None, "") or not str(registro.get("nmpaciente") or "").strip():
-                        raise ValueError("Paciente sem identificador ou nome.")
-                    codigo = str(registro["id"]).strip()
+                        raise ValueError("Atendimento sem identificador ou nome do paciente.")
+                    origem_id = str(registro["id"]).strip()
                     nome = str(registro["nmpaciente"]).strip()
                     admissao = _data_dadosbi(registro.get("dataadmissao"))
                     alta = _data_dadosbi(registro.get("dataalta"))
-                    situacao = str(registro.get("status") or "").strip().upper()
-                    if situacao == "ALTA" and not alta:
-                        raise ValueError("Paciente com alta sem data de alta.")
-                    if situacao == "EM ATENDIMENTO":
-                        alta = None
-                    motivo = str(registro.get("condicaoalta") or "").strip() or None
-                    existente = conn.execute("SELECT id FROM pacientes WHERE codigo = ?", (codigo,)).fetchone()
-                    valores = (
+                    if len(origem_id) > 40 or len(nome) > 200:
+                        raise ValueError("Identificador ou nome excede o tamanho permitido.")
+                    campos = (
                         nome,
+                        str(registro.get("idoperadora") or "").strip() or None,
                         str(registro.get("nmoperadora") or "").strip() or None,
                         str(registro.get("nmservico") or "").strip() or None,
+                        str(registro.get("status") or "").strip() or None,
                         admissao,
                         alta,
-                        motivo if alta else None,
+                        str(registro.get("condicaoalta") or "").strip() or None,
+                        str(registro.get("possuiterapias") or "").strip() or None,
+                        _data_dadosbi(registro.get("datainicioorcamento")),
+                        _data_dadosbi(registro.get("datafimorcamento")),
+                        agora,
                     )
+                    existente = conn.execute(
+                        "SELECT id FROM dadosbi_atendimentos WHERE origem_id = ?", (origem_id,)
+                    ).fetchone()
                     if existente:
                         conn.execute(
-                            "UPDATE pacientes SET nome=?, operadora=COALESCE(?, operadora), "
-                            "servico=COALESCE(?, servico), data_admissao=COALESCE(?, data_admissao), "
-                            "data_alta=?, motivo_alta=? WHERE codigo=?",
-                            (*valores, codigo),
+                            "UPDATE dadosbi_atendimentos SET nome_paciente=?, operadora_id=?, operadora=?, servico=?, "
+                            "status_origem=?, data_admissao=?, data_alta=?, condicao_alta=?, possui_terapias=?, "
+                            "inicio_orcamento=?, fim_orcamento=?, sincronizado_em=? WHERE origem_id=?",
+                            (*campos, origem_id),
                         )
-                        atualizados += 1
+                        atendimentos_atualizados += 1
                     else:
                         conn.execute(
-                            "INSERT INTO pacientes (codigo, nome, operadora, servico, data_admissao, data_alta, motivo_alta) "
-                            "VALUES (?,?,?,?,?,?,?)",
-                            (codigo, *valores),
+                            "INSERT INTO dadosbi_atendimentos (nome_paciente, operadora_id, operadora, servico, status_origem, "
+                            "data_admissao, data_alta, condicao_alta, possui_terapias, inicio_orcamento, fim_orcamento, "
+                            "sincronizado_em, origem_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (*campos, origem_id),
                         )
-                        criados += 1
-                    pacientes_validos.add(codigo)
+                        atendimentos_criados += 1
+                    atendimentos_validos.add(origem_id)
                 except (TypeError, ValueError):
                     erros += 1
 
             for registro in registros:
-                if not isinstance(registro, dict):
+                if not isinstance(registro, dict) or registro.get("id") in (None, ""):
                     continue
-                codigo = str(registro.get("id") or "").strip()
-                if codigo not in pacientes_validos:
+                atendimento_id = str(registro["id"]).strip()
+                if atendimento_id not in atendimentos_validos:
                     continue
                 visitas = registro.get("visitas") or []
                 if not isinstance(visitas, list):
@@ -154,36 +299,31 @@ def _sincronizar_dadosbi() -> dict:
                         if not isinstance(visita, dict) or visita.get("id") in (None, ""):
                             raise ValueError("Visita sem identificador.")
                         origem_id = str(visita["id"]).strip()
+                        visita_atendimento = str(visita.get("idadmission") or "").strip()
                         data = _data_dadosbi(visita.get("datavisita"))
-                        if not data:
-                            raise ValueError("Visita sem data.")
+                        if not data or len(origem_id) > 40 or visita_atendimento != atendimento_id:
+                            raise ValueError("Vínculo ou data da visita inválidos.")
                         profissional = str(visita.get("nmprofessional") or "").strip() or None
-                        especialidade = str(visita.get("nmespecialidade") or "").strip()
-                        texto = "Visita importada da API Saúde Residence."
-                        if especialidade:
-                            texto += f"\nEspecialidade: {especialidade}"
-                        if profissional:
-                            texto += f"\nProfissional: {profissional}"
+                        especialidade = str(visita.get("nmespecialidade") or "").strip() or None
+                        profissional_id = str(visita.get("idprofessional") or "").strip() or None
                         existente = conn.execute(
-                            "SELECT evolucao_id FROM dadosbi_visitas WHERE origem_id = ?", (origem_id,)
+                            "SELECT id FROM dadosbi_visitas_origem WHERE origem_id = ?", (origem_id,)
                         ).fetchone()
+                        campos = (atendimento_id, profissional_id, profissional, especialidade, data, agora)
                         if existente:
                             conn.execute(
-                                "UPDATE evolucoes SET codigo_paciente=?, data=?, tipo='Visita', profissional=?, texto=? "
-                                "WHERE id=?",
-                                (codigo, data, profissional, texto, existente["evolucao_id"]),
+                                "UPDATE dadosbi_visitas_origem SET atendimento_origem_id=?, profissional_id=?, "
+                                "profissional=?, especialidade=?, data_visita=?, sincronizado_em=? WHERE origem_id=?",
+                                (*campos, origem_id),
                             )
+                            visitas_atualizadas += 1
                         else:
-                            insercao = conn.execute(
-                                "INSERT INTO evolucoes (codigo_paciente, data, tipo, profissional, texto, autor, criado_em) "
-                                "VALUES (?,?,?,?,?,?,?)",
-                                (codigo, data, "Visita", profissional, texto, "Integração Saúde Residence", agora),
-                            )
                             conn.execute(
-                                "INSERT INTO dadosbi_visitas (origem_id, codigo_paciente, evolucao_id) VALUES (?,?,?)",
-                                (origem_id, codigo, insercao.lastrowid),
+                                "INSERT INTO dadosbi_visitas_origem (atendimento_origem_id, profissional_id, "
+                                "profissional, especialidade, data_visita, sincronizado_em, origem_id) VALUES (?,?,?,?,?,?,?)",
+                                (*campos, origem_id),
                             )
-                            visitas_importadas += 1
+                            visitas_criadas += 1
                     except (TypeError, ValueError):
                         erros += 1
 
@@ -191,9 +331,11 @@ def _sincronizar_dadosbi() -> dict:
             "ultima_execucao": agora,
             "ultima_sucesso": agora,
             "status": "sucesso" if not erros else "parcial",
-            "pacientes_criados": criados,
-            "pacientes_atualizados": atualizados,
-            "visitas_importadas": visitas_importadas,
+            "atendimentos_criados": atendimentos_criados,
+            "atendimentos_atualizados": atendimentos_atualizados,
+            "visitas_criadas": visitas_criadas,
+            "visitas_atualizadas": visitas_atualizadas,
+            "alertas_esquema": len(alertas_esquema),
             "erro": f"{erros} registro(s) inválido(s)." if erros else None,
         }
         _salvar_status_dadosbi(resultado)
@@ -212,9 +354,10 @@ def _sincronizar_dadosbi() -> dict:
             "ultima_execucao": agora,
             "ultima_sucesso": anterior.get("ultima_sucesso"),
             "status": "erro",
-            "pacientes_criados": 0,
-            "pacientes_atualizados": 0,
-            "visitas_importadas": 0,
+            "atendimentos_criados": 0,
+            "atendimentos_atualizados": 0,
+            "visitas_criadas": 0,
+            "visitas_atualizadas": 0,
             "erro": erro,
         })
         raise RuntimeError(erro) from exc

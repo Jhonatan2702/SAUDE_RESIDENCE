@@ -400,6 +400,11 @@ def create_app() -> Flask:
         a = request.args
         return jsonify(bi.pendencias_detalhe(a.get("terapia", ""), a.get("ini"), a.get("fim"), a.get("profissional")))
 
+    @app.get("/api/bi/obitos")
+    def api_bi_obitos():
+        a = request.args
+        return jsonify(bi.obitos_detalhe(a.get("ini"), a.get("fim"), a.get("filtro_tipo"), a.get("filtro_valor")))
+
     @app.get("/api/bi/faltas")
     def api_bi_faltas():
         a = request.args
@@ -858,6 +863,18 @@ def create_app() -> Flask:
     @exige("admin")
     def dadosbi_status():
         return jsonify(ig.status_dadosbi())
+
+    @app.get("/api/integracoes/dadosbi/monitor")
+    @exige("admin")
+    def dadosbi_monitor():
+        return jsonify(ig.listar_monitor_dadosbi())
+
+    @app.post("/api/integracoes/dadosbi/alertas/<int:alerta_id>/reconhecer")
+    @exige("admin")
+    def dadosbi_alerta_reconhecer(alerta_id):
+        if not ig.reconhecer_alerta_dadosbi(alerta_id):
+            return jsonify(erro="Alerta não encontrado ou já reconhecido."), 404
+        return jsonify(ok=True)
 
     @app.post("/api/integracoes/dadosbi/sincronizar")
     @exige("admin")

@@ -25,14 +25,18 @@ Banco em `dados\tst_gestao.db` (faça backup copiando este arquivo). Erros de in
 - Altas, admissões e óbitos vêm da tabela MOVIMENTACAO; cadastrar admissão/alta no paciente gera o evento automaticamente, e registrar o evento atualiza o paciente.
 - Distribuições (bairro, cidade, complexidade, idade, diagnóstico, serviço, operadora) consideram pacientes ativos (sem data de alta).
 - Mortalidade = óbitos do período ÷ pacientes expostos no período (admitidos até o fim e sem alta antes do início).
-- Pendências = terapias do mês atual com situação “Pendente” de pacientes ativos.
+- Pendências = pacientes ativos distintos com terapia “Pendente” nos meses do período selecionado.
+- O indicador de monitoramento conta pacientes ativos distintos com terapia registrada no período; o gráfico por terapia também conta pacientes distintos por tipo e mês. Um paciente pode constar em mais de um tipo de terapia.
+- A quantidade de pacientes com terapias pendentes é contada sem duplicar quem tem mais de um profissional para o mesmo tipo. A cobertura por bairro/profissional considera os bairros dos pacientes ativos com terapia cadastrada no período, não a disponibilidade de agenda.
+- O indicador de mortalidade pode ser clicado para consultar os eventos de óbito que compõem a taxa no período.
 
 ## Integrações API (menu *Integrações API*, somente Admin)
 - **Chaves de API** (leitura ou escrita) geradas na tela; a chave é exibida uma única vez e guardada apenas como hash.
 - **Saída:** `GET /api/v1/pacientes|terapias|movimentacao` (filtros, `limit`/`offset`) e `GET /api/v1/indicadores`.
 - **Entrada:** `POST /api/v1/pacientes|terapias|movimentacao` (objeto ou lista, upsert) e `POST /api/v1/importar/<recurso>` (.xlsx/.csv). A tela também permite importar planilhas.
 - **Webhooks:** POST JSON assinado (`X-TST-Signature: sha256=HMAC`) nos eventos `paciente.criado/atualizado`, `terapia.criada/atualizada`, `movimentacao.criada`.
-- **Saúde Residence BI:** a aplicação sincroniza pacientes e visitas na inicialização e a cada hora; Admin também pode sincronizar pela tela. O ID externo vira o código local, e cada visita é registrada uma única vez como evolução do tipo “Visita”. Campos não fornecidos pela origem são preservados e pacientes ausentes na resposta não são excluídos. A URL padrão é a fornecida pela equipe; pode ser substituída pela variável `TST_DADOSBI_URL`. A URL atual usa HTTP sem criptografia: solicite HTTPS antes de transmitir dados pessoais/de saúde e restrinja o acesso à rede autorizada.
+- **Saúde Residence BI:** a API `/dadospaciente` retorna episódios de atendimento (IDs de admissão/serviço), não o cadastro-base de pacientes: uma pessoa pode aparecer em vários IDs, e as visitas apontam para o ID do atendimento. A aplicação sincroniza esses atendimentos e visitas em tabelas próprias na inicialização e a cada hora; Admin também pode sincronizar pela tela. A integração não cria nem altera pacientes ou prontuários e não exclui registros ausentes da resposta. A URL padrão pode ser substituída pela variável `TST_DADOSBI_URL`. A URL atual usa HTTP sem criptografia: solicite HTTPS e restrinja o acesso à rede autorizada.
+- **Monitor da API Saúde Residence:** cada sincronização compara campos e tipos JSON com a primeira resposta observada e detecta novas categorias de status, serviço, operadora e terapias. Alertas persistentes aparecem em Integrações API; com a página aberta, ela verifica novidades a cada minuto. Para receber avisos fora do aplicativo, configure um webhook para `dadosbi.esquema_alterado`. O monitor guarda apenas caminhos/tipos de campos e categorias selecionadas, não nomes de pacientes ou valores de visitas.
 - A aplicação escuta na rede local na porta `8765`. Exemplos completos na própria tela.
 
 ## Prontuário do paciente

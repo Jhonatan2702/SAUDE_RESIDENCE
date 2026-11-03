@@ -190,7 +190,7 @@
       ['Óbitos ÷ pacientes atendidos', `Óbitos do período ÷ pacientes atendidos no período (${P.mortalidade.obitos}/${fmt(P.mortalidade.base)}). Atendidos = admitidos até o fim do período e sem alta antes do início. No ano: ${d.mortalidade.ano.obitos} óbitos em ${fmt(d.mortalidade.ano.base)} pacientes.`],
     ];
     document.getElementById('kpis').innerHTML = cards.map((c, i) =>
-      `<div class="kx" style="--c0:${COR[i][0]};--c:${COR[i][1]}"><span class="kx-ic">${ic(c.i)}</span>` +
+      `<div class="kx"${i === 4 ? ' data-acao="obitos" role="button" tabindex="0" aria-label="Ver pacientes que vieram a óbito no período"' : ''} style="--c0:${COR[i][0]};--c:${COR[i][1]}"><span class="kx-ic">${ic(c.i)}</span>` +
       `<div class="kx-c"><span class="kx-t">${c.t}<span class="info claro" tabindex="0" data-info="${esc(EXPLICA[i][1])}">${ic('info')}</span></span>` +
       `<b>${c.v}</b><em>${EXPLICA[i][0]}</em><small>${linha(c)}</small></div></div>`).join('');
   }
@@ -213,14 +213,14 @@
   function aneis(d) {
     const ind = d.evolucao.indicadores;
     const itens = [
-      ['azul', 'Terapias ativas', ind.terapias_ativas, 'terapias', 'Das terapias lançadas nos meses do período, quantas estão com situação “Ativa” (em atendimento).'],
+      ['azul', 'Pacientes ativos monitorados em terapias', ind.pacientes_monitorados, 'pacientes ativos', 'Pacientes ativos distintos com ao menos um registro de terapia nos meses selecionados, independentemente da situação da terapia.'],
       ['verde', 'Agendadas no sistema', ind.agendadas, 'terapias', 'Terapias do período marcadas com “Agendado = Sim”, ou seja, já lançadas na agenda do sistema.'],
       ['roxo', 'Relatórios enviados', ind.relatorios, 'terapias', 'Terapias do período marcadas com “Relatório = Sim” (relatório do profissional já entregue).'],
       ['laranja', 'Cadastro completo', ind.cadastro_completo, 'pacientes ativos', 'Pacientes ativos com data de nascimento, complexidade e diagnóstico preenchidos. Sem esses campos, os gráficos de idade, complexidade e diagnóstico ficam vazios.'],
     ];
     // o que falta para chegar a 100% — é o número que pede ação
-    const FALTA = ['não estão ativas', 'sem agendamento', 'sem relatório', 'com cadastro incompleto'];
-    const TIPO = ['ativas', 'agendadas', 'relatorios', 'cadastro'];
+    const FALTA = ['sem terapia registrada', 'sem agendamento', 'sem relatório', 'com cadastro incompleto'];
+    const TIPO = ['monitoramento', 'agendadas', 'relatorios', 'cadastro'];
     const FUNDO = {azul: '#eff6ff', verde: '#f0fdf4', roxo: '#f5f3ff', laranja: '#fff7ed'};
     document.getElementById('aneis').innerHTML = itens.map(([c, t, v, base, calc], i) => {
       const falta = Math.max(0, (v.total || 0) - (v.parte || 0));
@@ -375,7 +375,7 @@
     lista('l-cidade', d.cidades, 'agua');
     lista('l-oper', d.operadoras, 'roxo');
     lista('l-serv', d.servicos, 'laranja');
-    rosca('c-cx', d.complexidade.map(c => ({label: c.label, total: c.total})), null, {aviso: 'Complexidade', filtro: 'complexidade'});
+    barras('c-cx', d.complexidade, 'roxo', true, {filtro: 'complexidade'});
     barras('c-idade', d.idade.faixas, 'laranja', false, {aviso: 'Data de nascimento'});
     document.getElementById('idade-media').textContent = d.idade.media ? `média ${d.idade.media.toLocaleString('pt-BR')} anos` : '';
     barras('c-diag', d.diagnosticos.slice(0, 10), 'verde', true, {aviso: 'Diagnóstico', filtro: 'diagnostico'});
@@ -387,6 +387,13 @@
         `<td><div style="display:flex;align-items:center;gap:10px"><div style="flex:1;height:8px;background:#eef2f7;border-radius:99px;overflow:hidden">` +
         `<div style="width:${p}%;height:100%;background:linear-gradient(90deg,#38bdf8,#2563eb);border-radius:99px"></div></div><span class="muted" style="width:48px;text-align:right">${pct(p)}</span></div></td></tr>`;
     }).join('') || '<tr><td colspan="4" class="muted">Sem dados.</td></tr>';
+    const disponibilidade = d.evolucao.disponibilidade_profissionais;
+    document.getElementById('disp-prof-nota').textContent = `${fmt(disponibilidade.length)} combinações no período`;
+    document.querySelector('#t-prof-bairro tbody').innerHTML = disponibilidade.map(r =>
+      `<tr><td class="forte" data-filtro="profissional" data-valor="${esc(r.profissional)}">${esc(r.profissional)}</td>` +
+      `<td>${esc(r.terapia)}</td><td data-filtro="bairro" data-valor="${esc(r.bairro)}">${esc(r.bairro)}</td>` +
+      `<td>${esc(r.cidade)}</td><td class="r forte">${fmt(r.pacientes)}</td></tr>`
+    ).join('') || '<tr><td colspan="5" class="muted">Sem profissionais e bairros cadastrados no período.</td></tr>';
   }
 
   document.addEventListener('click', e => {
@@ -395,6 +402,26 @@
     selecionarFiltro(alvo.dataset.filtro, alvo.dataset.valor);
     if (filtroAtual.tipo === 'terapia' && alvo.closest('#l-pend')) detalharTerapias('Pendências de ' + alvo.dataset.valor, `terapia=${encodeURIComponent(alvo.dataset.valor)}`);
     else if (filtroAtual.tipo === 'profissional' && alvo.closest('#prof-lista')) detalharTerapias('Terapias de ' + alvo.dataset.valor, `profissional=${encodeURIComponent(alvo.dataset.valor)}`);
+  });
+
+  function detalharObitos() {
+    const filtro = filtroAtual.tipo
+      ? `&filtro_tipo=${encodeURIComponent(filtroAtual.tipo)}&filtro_valor=${encodeURIComponent(filtroAtual.valor)}`
+      : '';
+    return detalhe('Pacientes que vieram a óbito', `/api/bi/obitos?ini=${iniEl.value}&fim=${fimEl.value}${filtro}`,
+      itens => ({
+        colunas: ['Data', 'Código', 'Paciente', 'Bairro', 'Cidade', 'Motivo'],
+        linhas: itens.map(i => [fmtD(i.data), i.codigo, i.paciente, i.bairro, i.cidade, i.motivo]),
+      }));
+  }
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-acao="obitos"]')) detalharObitos();
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('[data-acao="obitos"]')) {
+      e.preventDefault();
+      detalharObitos();
+    }
   });
 
   const COLS_TER = ['Mês', 'Código', 'Paciente', 'Modalidade', 'Terapia', 'Empresa', 'Profissional', 'Situação'];
