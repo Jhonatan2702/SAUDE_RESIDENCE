@@ -147,6 +147,12 @@ canvas{max-height:440px}
 .tab-clic td:last-child,.analises-bi .table-wrap td:last-child{position:static;right:auto;box-shadow:none}
 .tab-clic th:last-child{position:sticky;top:0}
 .analises-bi .table-wrap th{position:sticky;top:0;z-index:2}
+.mapa-wrap{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(220px,1fr);gap:18px;align-items:start}
+#mapa-for{width:100%;max-height:520px;background:#f8fafc;border-radius:10px}
+#mapa-for path[data-det]:hover{stroke:#0f172a;stroke-width:.5}
+#mapa-lista>div{display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid var(--line)}
+#mapa-lista>div:hover{background:#eff6ff}
+@media(max-width:900px){.mapa-wrap{grid-template-columns:minmax(0,1fr)}}
 .tab-clic td{white-space:nowrap}.tab-clic td:last-child{background:transparent}
 [data-det],.tab-clic tr.clicavel{cursor:pointer}
 .kpi[data-det]:hover{filter:brightness(1.06)}.kpi div span[data-det]:hover{text-decoration:underline}

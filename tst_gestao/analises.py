@@ -222,8 +222,13 @@ def gerar(ini: date | None = None, fim: date | None = None) -> dict:
     pend_terapia = sorted(({"rotulo": e, "valor": len(l)} for e, l in atrasados.items()), key=lambda i: -i["valor"])
     pend_terapia.append({"rotulo": SEM_TERAPIA, "valor": len(pendentes)})
     total_ativos = len(ativos)
+    por_bairro = Counter((a.get("bairro") or "").strip().upper() for a in ativos if (a.get("bairro") or "").strip())
+    por_cidade = Counter((a.get("cidade") or "").strip() for a in ativos if (a.get("cidade") or "").strip())
 
     return {
+        "bairros": _top(por_bairro, 1000),
+        "cidades": _top(por_cidade, 20),
+        "sem_localizacao": total_ativos - sum(por_bairro.values()),
         "dma": dma,
         "motivos": motivos,
         "pendencias_terapia": pend_terapia,
@@ -390,6 +395,10 @@ def detalhe(tipo: str, valor: str | None, ini: date | None = None, fim: date | N
             lista = _atrasados_terapia(ativos, _ultima_visita_terapia(visitas, fim), fim).get(valor, [])
             titulo = f"{valor}: com terapias, atendidos nos {janela} e sem visita nos últimos {JANELA_ATRASO} dias"
         r = lin_atend(lista)
+    elif tipo in ("bairro", "cidade"):
+        campo = tipo
+        lista = [a for a in ativos if (a.get(campo) or "").strip().upper() == valor.upper()]
+        titulo, r = f"Ativos — {tipo} {valor}", lin_atend(lista)
     elif tipo == "atendimento":
         a = por_id.get(valor)
         if not a:

@@ -76,6 +76,33 @@
     options: {cutout: '62%', plugins: {legend: {position: 'right', labels: {boxWidth: 10}}}},
   }, i => abrir(tipo, itens[i].rotulo));
 
+  // mapa de Fortaleza (SVG sem biblioteca); contornos em static/fortaleza-bairros.geojson
+  let geoBairros = null;
+  const semAcento = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+  async function desenharMapa(d) {
+    const svg = document.getElementById('mapa-for');
+    if (!geoBairros) geoBairros = await fetch('/static/fortaleza-bairros.geojson').then(r => r.json()).catch(() => null);
+    if (!geoBairros) return;
+    const qtd = new Map(d.bairros.map(b => [semAcento(b.rotulo), b.valor]));
+    const max = Math.max(1, ...qtd.values());
+    const pts = geoBairros.features.flatMap(f => f.geometry.coordinates.flat());
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    const x0 = Math.min(...xs), y1 = Math.max(...ys), k = Math.cos(-3.76 * Math.PI / 180);
+    const w = (Math.max(...xs) - x0) * k, h = y1 - Math.min(...ys), ea = 100 / Math.max(w, h);
+    svg.setAttribute('viewBox', `0 0 ${(w * ea).toFixed(2)} ${(h * ea).toFixed(2)}`);
+    svg.innerHTML = geoBairros.features.map(f => {
+      const nome = f.properties.bairro, v = qtd.get(semAcento(nome)) || 0;
+      const path = f.geometry.coordinates.map(a => 'M' + a.map(p => `${((p[0] - x0) * k * ea).toFixed(2)},${((y1 - p[1]) * ea).toFixed(2)}`).join('L') + 'Z').join('');
+      const fill = v ? `rgba(37,99,235,${(0.2 + 0.8 * v / max).toFixed(2)})` : '#e2e8f0';
+      return `<path d="${path}" fill="${fill}" fill-rule="evenodd" stroke="#fff" stroke-width=".25"${v ? ` data-det="bairro" data-valor="${esc(nome)}"` : ''}><title>${esc(nome)} · ${fmt(v)} paciente(s)</title></path>`;
+    }).join('');
+    const total = d.bairros.reduce((s, b) => s + b.valor, 0);
+    document.getElementById('mapa-nota').textContent = total ? `${fmt(total)} ativos localizados · ${fmt(d.sem_localizacao)} sem bairro` : 'Sem dados de bairro na API';
+    document.getElementById('mapa-lista').innerHTML = total
+      ? '<b>Top bairros</b>' + d.bairros.slice(0, 10).map(b => `<div data-det="bairro" data-valor="${esc(b.rotulo)}"><span>${esc(b.rotulo)}</span><b>${fmt(b.valor)}</b></div>`).join('')
+      : '<p class="desc">Aguardando a API enviar bairro/cidade dos pacientes. Assim que chegar, os bairros serão pintados aqui automaticamente.</p>';
+  }
+
   let dados = null, escMotivo = 'mes';
   function desenharMotivos() {
     document.querySelectorAll('#mot-esc button').forEach(b => b.classList.toggle('on', b.dataset.esc === escMotivo));
@@ -143,6 +170,7 @@
     document.getElementById('t-dma').innerHTML = linhasDma.map(([nome, campo, tipo, f]) =>
       `<tr><td>${nome}</td>` + ['dia', 'mes', 'ano'].map(e => `<td class="r" data-det="${tipo}" data-valor="${e}"><b>${f(d.dma[e][campo])}</b></td>`).join('') + '</tr>').join('');
     document.getElementById('dma-nota').textContent = `Dia ${d.dma.dia.rotulo} · Mês ${d.dma.mes.rotulo.split(' até')[0]} · Ano ${d.dma.ano.rotulo.split(' até')[0]}`;
+    desenharMapa(d);
     desenharMotivos();
     barras('c-pend', d.pendentes_operadora, 'pendentes');
 
