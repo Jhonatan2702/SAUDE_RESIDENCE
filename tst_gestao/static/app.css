@@ -139,6 +139,18 @@ canvas{max-height:440px}
 .bi [data-filtro]{cursor:pointer}.bi [data-filtro]:hover{filter:brightness(.96);outline:2px solid #93c5fd;outline-offset:2px}
 .bi{display:flex;flex-direction:column}
 .bi>.kpis{order:1}.bi>.aneis{order:2}
+.bi.analises-bi>.kpis{order:0;grid-template-columns:repeat(4,minmax(0,1fr))}
+.bi.analises-bi .painel-g{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bi.analises-bi .painel-g>.card:last-child:nth-child(odd){grid-column:1/-1}
+@media(max-width:900px){.bi.analises-bi>.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.bi.analises-bi .painel-g{grid-template-columns:minmax(0,1fr)}}
+.tab-clic td:last-child,.analises-bi .table-wrap td:last-child{position:static;right:auto;box-shadow:none}
+.tab-clic th:last-child{position:sticky;top:0}
+.analises-bi .table-wrap th{position:sticky;top:0;z-index:2}
+.tab-clic td{white-space:nowrap}.tab-clic td:last-child{background:transparent}
+[data-det],.tab-clic tr.clicavel{cursor:pointer}
+.kpi[data-det]:hover{filter:brightness(1.06)}.kpi div span[data-det]:hover{text-decoration:underline}
+.tab-clic tbody tr[data-det]:hover,.tab-clic tbody tr.clicavel:hover{background:#eff6ff}
 .bi>.prioridade-lista{order:3}.bi>.prioridade-cadastro{order:4}
 .bi>.demais-evolucao{order:8}.bi>.demais-tabela{order:10}
 .bi>.prioridade-lista .card:nth-child(1){order:2}

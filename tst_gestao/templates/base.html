@@ -13,9 +13,9 @@
 </head>
 <body>
 {% include "_icones.html" %}
-{% set COR_IC = {'bi': '#38bdf8', 'relatorios': '#a78bfa', 'pacientes': '#34d399', 'terapias': '#f472b6', 'movimentacao': '#fbbf24', 'listas': '#60a5fa', 'usuarios': '#fb923c', 'integracoes': '#2dd4bf', 'banco': '#c084fc'} %}
+{% set COR_IC = {'evolucao': '#f87171', 'bi': '#38bdf8', 'relatorios': '#a78bfa', 'pacientes': '#34d399', 'terapias': '#f472b6', 'movimentacao': '#fbbf24', 'listas': '#60a5fa', 'usuarios': '#fb923c', 'integracoes': '#2dd4bf', 'banco': '#c084fc'} %}
 {% macro item(rota, chave, icone, texto) %}<a href="{{ rota }}" class="{{ 'on' if ativa == chave }}" data-tip="{{ texto }}" style="--ic:{{ COR_IC.get(icone, '#94a3b8') }}"><svg class="ic"><use href="#i-{{ icone }}"/></svg><span class="tx">{{ texto }}</span></a>{% endmacro %}
-{% set grupo = {'dashboard': 'Análises', 'relatorios': 'Análises', 'pacientes': 'Cadastros', 'terapias': 'Cadastros', 'movimentacao': 'Cadastros',
+{% set grupo = {'dashboard': 'Análises', 'analises': 'Análises', 'relatorios': 'Análises', 'pacientes': 'Cadastros', 'terapias': 'Cadastros', 'movimentacao': 'Cadastros',
   'listas': 'Configurações', 'usuarios': 'Configurações', 'integracoes': 'Configurações', 'banco': 'Configurações', 'perfil': 'Minha conta'} %}
 <aside class="sidebar">
   <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="TST"><div class="tx"><strong>TST-GESTÃO</strong><small>Gestão de pacientes</small></div></div>
@@ -23,6 +23,7 @@
     <span class="nav-sec">Análises</span>
     <div class="nav-grupo">
     {{ item(url_for('index'), 'dashboard', 'bi', 'Painel BI') }}
+    {{ item(url_for('analises'), 'analises', 'evolucao', 'Análises API') }}
     {{ item(url_for('relatorios'), 'relatorios', 'relatorios', 'Relatórios') }}
     </div>
     <span class="nav-sec">Cadastros</span>
@@ -46,7 +47,7 @@
   </div>
 </aside>
 <main class="content">
-  {% set ic_pag = {'dashboard': 'bi', 'perfil': 'perfil'}.get(ativa, ativa) %}
+  {% set ic_pag = {'dashboard': 'bi', 'analises': 'evolucao', 'perfil': 'perfil'}.get(ativa, ativa) %}
   {% block topo %}<header class="bi-topo topo-pag"><div class="bt-tit"><i class="bt-ic"><svg class="ic"><use href="#i-{{ ic_pag or 'bi' }}"/></svg></i><span class="bt-trilha">{% block trilha %}{{ grupo.get(ativa, 'TST-GESTÃO') }}{% endblock %} <b>›</b></span><h1>{% block cabecalho %}{% endblock %}</h1></div><div class="actions">{% block acoes %}{% endblock %}</div></header>{% endblock %}
   {% block conteudo %}{% endblock %}
 </main>

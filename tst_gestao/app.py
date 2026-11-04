@@ -10,6 +10,7 @@ from flask import Flask, Response, abort, jsonify, redirect, render_template, re
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from . import analises as an
 from . import bi
 from . import relatorios as rel
 from . import integracoes as ig
@@ -225,6 +226,28 @@ def create_app() -> Flask:
     @app.route("/")
     def index():
         return render_template("dashboard.html", ativa="dashboard", hoje=date.today().isoformat())
+
+    @app.route("/analises")
+    def analises():
+        return render_template("analises.html", ativa="analises", hoje=date.today().isoformat())
+
+    @app.get("/api/analises")
+    def api_analises():
+        try:
+            ini = date.fromisoformat(request.args["ini"]) if request.args.get("ini") else None
+            fim = date.fromisoformat(request.args["fim"]) if request.args.get("fim") else None
+        except ValueError:
+            return jsonify(erro="Período inválido."), 400
+        return jsonify(an.gerar(ini, fim))
+
+    @app.get("/api/analises/detalhe")
+    def api_analises_detalhe():
+        try:
+            ini = date.fromisoformat(request.args["ini"]) if request.args.get("ini") else None
+            fim = date.fromisoformat(request.args["fim"]) if request.args.get("fim") else None
+            return jsonify(an.detalhe(request.args.get("tipo", ""), request.args.get("valor"), ini, fim))
+        except ValueError as exc:
+            return jsonify(erro=str(exc)), 400
 
     @app.route("/relatorios")
     def relatorios():
