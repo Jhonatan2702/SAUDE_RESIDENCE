@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, timedelta
+import json
+import unicodedata
 
 from .db import connect
 
@@ -11,9 +13,15 @@ JANELA_TERAPIA = 90
 JANELA_ATRASO = 15
 SEM_TERAPIA = "Nenhuma terapia (90 d)"
 NIVEIS_COMPLEXIDADE = ["Sem terapia", "Básico", "Intermediário", "Intensivo"]
-COLS_ATEND = ["Atendimento", "Paciente", "Operadora", "Serviço", "Admissão", "Alta", "Dias", "Visitas no período", "Especialidades (90 d)"]
+COLS_ATEND = [
+    "Atendimento", "Paciente", "Operadora", "Serviço", "Admissão", "Alta", "Dias",
+    "Visitas no período", "Especialidades (90 d)", "Idade", "Diagnóstico", "Complexidade informada",
+    "Cidade", "Bairro",
+]
 COLS_VISITA = ["Data", "Atendimento", "Paciente", "Operadora", "Profissional", "Especialidade"]
 COLS_PROFISSIONAL = ["Profissional", "Especialidade principal", "Visitas", "Dias com visita", "Atendimentos", "Operadoras"]
+COLS_RELATORIOS = ["Relatório", "Atendimento", "Profissional", "Especialidade", "Competência", "ID profissional", "ID especialidade"]
+FAIXAS_IDADE = [("0-17", 0, 17), ("18-39", 18, 39), ("40-59", 40, 59), ("60-79", 60, 79), ("80+", 80, 130)]
 
 
 def _nivel(qtd_especialidades: int) -> str:
@@ -113,6 +121,26 @@ def _top(contador: Counter, n: int) -> list[dict]:
     return [{"rotulo": k, "valor": v} for k, v in contador.most_common(n)]
 
 
+def _faixa_idade(valor) -> str | None:
+    try:
+        idade_numero = float(valor)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not idade_numero.is_integer():
+        return None
+    idade = int(idade_numero)
+    for rotulo, minimo, maximo in FAIXAS_IDADE:
+        if minimo <= idade <= maximo:
+            return rotulo
+    return None
+
+
+def _mapa_fortaleza(a: dict) -> bool:
+    cidade = unicodedata.normalize("NFD", (a.get("cidade") or "").casefold())
+    cidade = "".join(c for c in cidade if unicodedata.category(c) != "Mn")
+    return not cidade.strip() or "fortaleza" in cidade
+
+
 def _meses(ini: date, fim: date) -> list[str]:
     """Meses do período; se curto, estende para trás até ter ao menos MIN_MESES (limite MAX_MESES)."""
     total = (fim.year - ini.year) * 12 + fim.month - ini.month + 1
@@ -130,7 +158,8 @@ def _carregar():
     with connect() as conn:
         atend = [dict(r) for r in conn.execute(
             "SELECT origem_id, nome_paciente, operadora, servico, status_origem, data_admissao, data_alta, condicao_alta, "
-            "possui_terapias FROM dadosbi_atendimentos")]
+            "possui_terapias, idade, diagnostico, complexidade, cidade, bairro, relatorios_pendentes_json "
+            "FROM dadosbi_atendimentos")]
         visitas = [dict(r) for r in conn.execute(
             "SELECT atendimento_origem_id, profissional, especialidade, data_visita FROM dadosbi_visitas_origem")]
         sync = conn.execute("SELECT MAX(sincronizado_em) AS m FROM dadosbi_atendimentos").fetchone()
@@ -222,13 +251,32 @@ def gerar(ini: date | None = None, fim: date | None = None) -> dict:
     pend_terapia = sorted(({"rotulo": e, "valor": len(l)} for e, l in atrasados.items()), key=lambda i: -i["valor"])
     pend_terapia.append({"rotulo": SEM_TERAPIA, "valor": len(pendentes)})
     total_ativos = len(ativos)
-    por_bairro = Counter((a.get("bairro") or "").strip().upper() for a in ativos if (a.get("bairro") or "").strip())
+    ativos_mapa = [a for a in ativos if _mapa_fortaleza(a)]
+    por_bairro = Counter((a.get("bairro") or "").strip().upper() for a in ativos_mapa if (a.get("bairro") or "").strip())
     por_cidade = Counter((a.get("cidade") or "").strip() for a in ativos if (a.get("cidade") or "").strip())
+    por_idade = Counter(_faixa_idade(a.get("idade")) or "Não informada" for a in ativos)
+    idades = [int(float(a["idade"])) for a in ativos if _faixa_idade(a.get("idade"))]
+    diagnosticos = Counter((a.get("diagnostico") or "").strip() or "Não informado" for a in ativos)
+    complexidade_informada = Counter((a.get("complexidade") or "").strip() or "Não informada" for a in ativos)
+    relatorios_pendentes = []
+    for a in atend:
+        relatorios_pendentes.extend(
+            {**relatorio, "atendimento_origem_id": a["origem_id"]}
+            for relatorio in json.loads(a.get("relatorios_pendentes_json") or "[]")
+        )
+    pendentes_especialidade = Counter(r["especialidade"] or "Não informada" for r in relatorios_pendentes)
+    pendentes_profissional = Counter(r["profissional"] or "Não informado" for r in relatorios_pendentes)
 
     return {
         "bairros": _top(por_bairro, 1000),
         "cidades": _top(por_cidade, 20),
-        "sem_localizacao": total_ativos - sum(por_bairro.values()),
+        "faixas_etarias": _top(por_idade, len(FAIXAS_IDADE) + 1),
+        "diagnosticos": _top(diagnosticos, 8),
+        "complexidade_informada": _top(complexidade_informada, 8),
+        "relatorios_pendentes_especialidade": _top(pendentes_especialidade, 8),
+        "relatorios_pendentes_profissional": _top(pendentes_profissional, 8),
+        "relatorios_pendentes_total": len(relatorios_pendentes),
+        "sem_localizacao": len(ativos_mapa) - sum(por_bairro.values()),
         "dma": dma,
         "motivos": motivos,
         "pendencias_terapia": pend_terapia,
@@ -253,6 +301,10 @@ def gerar(ini: date | None = None, fim: date | None = None) -> dict:
             "monitoramento_ativos": sum(1 for a in ativos if _monitoramento(a)),
             "terapias_pendentes": len(pendentes),
             "com_terapias": sum(1 for a in ativos if _com_terapias(a)),
+            "relatorios_pendentes": len(relatorios_pendentes),
+            "idade_media": round(sum(idades) / len(idades), 1) if idades else 0,
+            "idosos": sum(1 for i in idades if i >= 60),
+            "idade_informada": len(idades),
         },
         "janela_terapia": JANELA_TERAPIA,
         "terapias": _top(por_terapia, 8),
@@ -302,7 +354,9 @@ def detalhe(tipo: str, valor: str | None, ini: date | None = None, fim: date | N
             dias = ((alta or fim) - adm).days if adm else ""
             saida.append([a["origem_id"], a["nome_paciente"], a["operadora"] or "—", a["servico"] or "—",
                           _br(adm), _br(alta), dias, visitas_atend.get(a["origem_id"], 0),
-                          " · ".join(sorted(esp_janela.get(a["origem_id"], ()))) or "—"])
+                          " · ".join(sorted(esp_janela.get(a["origem_id"], ()))) or "—",
+                          a.get("idade") or "—", a.get("diagnostico") or "—", a.get("complexidade") or "—",
+                          a.get("cidade") or "—", a.get("bairro") or "—"])
         return {"colunas": COLS_ATEND, "linhas": saida, "drill": {"tipo": "atendimento", "col": 0}}
 
     def lin_visitas(lista):
@@ -397,8 +451,37 @@ def detalhe(tipo: str, valor: str | None, ini: date | None = None, fim: date | N
         r = lin_atend(lista)
     elif tipo in ("bairro", "cidade"):
         campo = tipo
-        lista = [a for a in ativos if (a.get(campo) or "").strip().upper() == valor.upper()]
+        lista = [a for a in ativos if (tipo != "bairro" or _mapa_fortaleza(a))
+                 and (a.get(campo) or "").strip().upper() == valor.upper()]
         titulo, r = f"Ativos — {tipo} {valor}", lin_atend(lista)
+    elif tipo in ("idade", "diagnostico", "complexidade_informada"):
+        if tipo == "idade" and not valor:
+            lista = [a for a in ativos if _faixa_idade(a.get("idade"))]
+            titulo = "Ativos com idade informada"
+        elif tipo == "idade":
+            lista = [a for a in ativos if (_faixa_idade(a.get("idade")) or "Não informada") == valor]
+            titulo = f"Ativos — faixa etária {valor}"
+        else:
+            campo = "diagnostico" if tipo == "diagnostico" else "complexidade"
+            lista = [a for a in ativos if ((a.get(campo) or "").strip() or
+                     ("Não informado" if tipo == "diagnostico" else "Não informada")) == valor]
+            titulo = f"Ativos — {('diagnóstico' if tipo == 'diagnostico' else 'complexidade informada')} {valor}"
+        titulo += f" ({_br(fim)})"
+        r = lin_atend(lista)
+    elif tipo in ("relatorios_especialidade", "relatorios_profissional"):
+        campo = "especialidade" if tipo == "relatorios_especialidade" else "profissional"
+        lista = []
+        for a in atend:
+            for relatorio in json.loads(a.get("relatorios_pendentes_json") or "[]"):
+                rotulo = relatorio.get(campo) or ("Não informada" if campo == "especialidade" else "Não informado")
+                if not valor or rotulo == valor:
+                    lista.append([
+                        relatorio.get("id") or "—", a["origem_id"], relatorio.get("profissional") or "—",
+                        relatorio.get("especialidade") or "—", relatorio.get("competencia") or "—",
+                        relatorio.get("profissional_id") or "—", relatorio.get("especialidade_id") or "—",
+                    ])
+        titulo = f"Relatórios pendentes{f' — {campo} {valor}' if valor else ''}"
+        r = {"colunas": COLS_RELATORIOS, "linhas": lista, "drill": None}
     elif tipo == "atendimento":
         a = por_id.get(valor)
         if not a:

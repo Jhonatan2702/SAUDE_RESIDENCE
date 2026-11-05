@@ -58,10 +58,22 @@
   <div class="card"><h3><span class="tt">Terapias pendentes por operadora{{ info('Pacientes ativos marcados com terapias na API (possui terapias = SIM) que não tiveram nenhuma visita nos últimos 90 dias. É uma aproximação: a API não informa a situação da terapia.') }}</span><small>top 8</small></h3><div class="chart" style="height:260px"><canvas id="c-pend"></canvas></div></div>
 </section>
 
-<div class="card"><h3><span class="tt">Pacientes por bairro · Fortaleza-CE{{ info('Mapa dos 121 bairros de Fortaleza, colorido pela quantidade de pacientes ativos em cada bairro (mais escuro = mais pacientes). Clique num bairro para ver os pacientes. A API ainda não envia bairro/cidade, por isso o mapa aparece sem dados.') }}</span><small id="mapa-nota"></small></h3>
+<section class="painel-g">
+  <div class="card"><h3><span class="tt">Faixa etária{{ info('Atendimentos ativos agrupados pela idade enviada pela API. Idades ausentes ou fora da faixa válida aparecem como Não informada.') }}</span></h3><div class="chart" style="height:260px"><canvas id="c-idade"></canvas></div></div>
+  <div class="card"><h3><span class="tt">Diagnósticos{{ info('Diagnósticos informados pela API para os atendimentos ativos (top 8).') }}</span></h3><div class="chart" style="height:260px"><canvas id="c-diagnostico"></canvas></div></div>
+  <div class="card"><h3><span class="tt">Complexidade informada{{ info('Complexidade do atendimento enviada pela API, separada da estimativa calculada pelo número de especialidades.') }}</span></h3><div class="chart" style="height:260px"><canvas id="c-complexidade-api"></canvas></div></div>
+</section>
+
+<section class="painel-g">
+  <div class="card"><h3><span class="tt">Atendimentos ativos por cidade{{ info('Atendimentos ativos agrupados pela cidade informada na API.') }}</span><small>top 20</small></h3><div class="chart" style="height:260px"><canvas id="c-cidade"></canvas></div></div>
+  <div class="card"><h3><span class="tt">Relatórios pendentes por especialidade{{ info('Relatórios pendentes informados pela API, agrupados pela especialidade. O indicador reflete a lista atual da API e não o filtro de período.') }}</span></h3><div class="chart" style="height:260px"><canvas id="c-relatorios-especialidade"></canvas></div></div>
+  <div class="card"><h3><span class="tt">Relatórios pendentes por profissional{{ info('Relatórios pendentes informados pela API, agrupados pelo profissional. O indicador reflete a lista atual da API e não o filtro de período.') }}</span></h3><div class="chart" style="height:260px"><canvas id="c-relatorios-profissional"></canvas></div></div>
+</section>
+
+<div class="card"><h3><span class="tt">Atendimentos por bairro · Fortaleza-CE{{ info('Mapa dos 121 bairros de Fortaleza, colorido pela quantidade de atendimentos ativos em cada bairro. Clique num bairro para ver os atendimentos. A API informa bairro/cidade quando disponíveis.') }}</span><small id="mapa-nota"></small></h3>
   <div class="mapa-wrap"><svg id="mapa-for" viewBox="0 0 100 100" role="img" aria-label="Mapa de Fortaleza por bairro"></svg><div id="mapa-lista"></div></div></div>
 
-<div class="card flush"><h3><span class="tt">Profissional × atendimentos{{ info('Para cada profissional com visitas no período: visitas, dias distintos com visita, atendimentos (pacientes) atendidos e quantidade de operadoras. A API não informa bairro, por isso não há disponibilidade por bairro.') }}</span><small>top 15 do período</small></h3>
+<div class="card flush"><h3><span class="tt">Profissional × atendimentos{{ info('Para cada profissional com visitas no período: visitas, dias distintos com visita, atendimentos (pacientes) atendidos e quantidade de operadoras. A API informa o bairro do atendimento, mas não a disponibilidade do profissional por bairro.') }}</span><small>top 15 do período</small></h3>
   <p class="desc">Carga de cada profissional no período. Clique numa linha para ver as visitas. <button type="button" class="btn ghost sm" data-det="profissionais">Ver todos</button></p>
   <div class="table-wrap" style="max-height:380px"><table class="tab-clic"><thead><tr><th>Profissional</th><th>Especialidade principal</th><th class="r">Visitas</th><th class="r">Dias com visita</th><th class="r">Atendimentos</th><th class="r">Operadoras</th></tr></thead><tbody id="t-prof"></tbody></table></div></div>
 
@@ -86,4 +98,3 @@
 <script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
 <script src="{{ url_for('static', filename='analises.js') }}"></script>
 {% endblock %}
-

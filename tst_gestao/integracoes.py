@@ -30,6 +30,7 @@ DADOSBI_URL_PADRAO = "http://35.247.217.138:8081/SaudeResidenceHomeCareServices/
 DADOSBI_LIMITE_RESPOSTA = 25_000_000
 DADOSBI_LIMITE_REGISTROS = 20_000
 DADOSBI_LIMITE_VISITAS = 100_000
+DADOSBI_LIMITE_RELATORIOS = 100_000
 DADOSBI_INTERVALO = 60 * 60
 DADOSBI_CATEGORIAS_MONITORADAS = {"status", "nmservico", "possuiterapias", "idoperadora", "nmoperadora"}
 _dadosbi_trava = threading.Lock()
@@ -51,6 +52,41 @@ def _data_dadosbi(valor) -> str | None:
         except ValueError:
             continue
     raise ValueError("Data inválida na resposta da API.")
+
+
+def _texto_dadosbi(registro: dict, campo: str, limite: int) -> str | None:
+    valor = registro.get(campo)
+    if valor is None:
+        return None
+    if isinstance(valor, (dict, list, bool)):
+        raise ValueError(f"Campo {campo} inválido na resposta da API.")
+    texto = str(valor).strip()
+    if len(texto) > limite:
+        raise ValueError(f"Campo {campo} excede o tamanho permitido.")
+    return texto or None
+
+
+def _relatorios_pendentes_dadosbi(valor, atendimento_id: str) -> list[dict]:
+    if valor is None:
+        return []
+    if not isinstance(valor, list):
+        raise ValueError("Lista de relatórios pendentes inválida.")
+    relatorios = []
+    for item in valor:
+        if not isinstance(item, dict):
+            raise ValueError("Relatório pendente inválido.")
+        vinculo = _texto_dadosbi(item, "idadmission", 40)
+        if vinculo and vinculo != atendimento_id:
+            raise ValueError("Relatório pendente vinculado a outro atendimento.")
+        relatorios.append({
+            "id": _texto_dadosbi(item, "id", 40),
+            "profissional_id": _texto_dadosbi(item, "idprofessional", 40),
+            "especialidade_id": _texto_dadosbi(item, "idespecialidade", 40),
+            "profissional": _texto_dadosbi(item, "nmprofessional", 200),
+            "especialidade": _texto_dadosbi(item, "nmespecialidade", 200),
+            "competencia": _texto_dadosbi(item, "competencia", 30),
+        })
+    return relatorios
 
 
 def _salvar_status_dadosbi(status: dict) -> None:
@@ -234,6 +270,12 @@ def _sincronizar_dadosbi() -> dict:
         )
         if total_visitas > DADOSBI_LIMITE_VISITAS:
             raise ValueError("Quantidade de visitas excede o limite permitido.")
+        total_relatorios = sum(
+            len(r.get("relatoriospendentes") or []) for r in registros
+            if isinstance(r, dict) and isinstance(r.get("relatoriospendentes") or [], list)
+        )
+        if total_relatorios > DADOSBI_LIMITE_RELATORIOS:
+            raise ValueError("Quantidade de relatórios pendentes excede o limite permitido.")
 
         with connect() as conn:
             atendimentos_validos = set()
@@ -245,6 +287,7 @@ def _sincronizar_dadosbi() -> dict:
                     nome = str(registro["nmpaciente"]).strip()
                     admissao = _data_dadosbi(registro.get("dataadmissao"))
                     alta = _data_dadosbi(registro.get("dataalta"))
+                    relatorios = _relatorios_pendentes_dadosbi(registro.get("relatoriospendentes"), origem_id)
                     if len(origem_id) > 40 or len(nome) > 200:
                         raise ValueError("Identificador ou nome excede o tamanho permitido.")
                     campos = (
@@ -259,6 +302,12 @@ def _sincronizar_dadosbi() -> dict:
                         str(registro.get("possuiterapias") or "").strip() or None,
                         _data_dadosbi(registro.get("datainicioorcamento")),
                         _data_dadosbi(registro.get("datafimorcamento")),
+                        _texto_dadosbi(registro, "idade", 10),
+                        _texto_dadosbi(registro, "diagnostico", 200),
+                        _texto_dadosbi(registro, "complexidade", 120),
+                        _texto_dadosbi(registro, "cidade", 120),
+                        _texto_dadosbi(registro, "bairro", 120),
+                        json.dumps(relatorios, ensure_ascii=False),
                         agora,
                     )
                     existente = conn.execute(
@@ -268,7 +317,8 @@ def _sincronizar_dadosbi() -> dict:
                         conn.execute(
                             "UPDATE dadosbi_atendimentos SET nome_paciente=?, operadora_id=?, operadora=?, servico=?, "
                             "status_origem=?, data_admissao=?, data_alta=?, condicao_alta=?, possui_terapias=?, "
-                            "inicio_orcamento=?, fim_orcamento=?, sincronizado_em=? WHERE origem_id=?",
+                            "inicio_orcamento=?, fim_orcamento=?, idade=?, diagnostico=?, complexidade=?, cidade=?, bairro=?, "
+                            "relatorios_pendentes_json=?, sincronizado_em=? WHERE origem_id=?",
                             (*campos, origem_id),
                         )
                         atendimentos_atualizados += 1
@@ -276,7 +326,8 @@ def _sincronizar_dadosbi() -> dict:
                         conn.execute(
                             "INSERT INTO dadosbi_atendimentos (nome_paciente, operadora_id, operadora, servico, status_origem, "
                             "data_admissao, data_alta, condicao_alta, possui_terapias, inicio_orcamento, fim_orcamento, "
-                            "sincronizado_em, origem_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            "idade, diagnostico, complexidade, cidade, bairro, relatorios_pendentes_json, sincronizado_em, "
+                            "origem_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                             (*campos, origem_id),
                         )
                         atendimentos_criados += 1

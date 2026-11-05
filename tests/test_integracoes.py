@@ -134,6 +134,20 @@ def test_sincronizar_dadosbi_importa_atendimentos_e_visitas_sem_vincular_pacient
                 "datainicioorcamento": "01/10/2026",
                 "datafimorcamento": "01/11/2026",
                 "possuiterapias": "SIM",
+                "idade": 72,
+                "diagnostico": "Diagnóstico de teste",
+                "complexidade": "Alta",
+                "cidade": "Fortaleza",
+                "bairro": "Meireles",
+                "relatoriospendentes": [{
+                    "id": "RP-TESTE-1",
+                    "idadmission": "DADOSBI-TESTE-1",
+                    "idprofessional": 123,
+                    "nmprofessional": "Profissional de teste",
+                    "idespecialidade": 456,
+                    "nmespecialidade": "Fisioterapia",
+                    "competencia": "10/2024",
+                }],
                 "visitas": [{
                     "id": "DADOSBI-VISITA-TESTE-1",
                     "idadmission": "DADOSBI-TESTE-1",
@@ -197,8 +211,30 @@ def test_sincronizar_dadosbi_importa_atendimentos_e_visitas_sem_vincular_pacient
     assert pacientes == pacientes_antes and evolucoes == evolucoes_antes
     assert len(atendimentos) == 2 and atendimentos[0]["data_admissao"] == "2024-08-22"
     assert atendimentos[1]["data_alta"] == "2025-01-19"
+    assert (atendimentos[0]["idade"], atendimentos[0]["diagnostico"], atendimentos[0]["complexidade"]) == (
+        "72", "Diagnóstico de teste", "Alta")
+    assert (atendimentos[0]["cidade"], atendimentos[0]["bairro"]) == ("Fortaleza", "Meireles")
+    assert json.loads(atendimentos[0]["relatorios_pendentes_json"])[0]["competencia"] == "10/2024"
     assert len(visitas) == 1 and visitas[0]["atendimento_origem_id"] == "DADOSBI-TESTE-1"
     assert visitas[0]["especialidade"] == "Fisioterapia atualizada"
+    analise = admin()
+    assert analise.get("/analises").status_code == 200
+    relatorio = analise.get("/api/analises?ini=2024-10-01&fim=2024-10-31").get_json()
+    assert relatorio["faixas_etarias"] == [{"rotulo": "60-79", "valor": 1}]
+    assert relatorio["diagnosticos"] == [{"rotulo": "Diagnóstico de teste", "valor": 1}]
+    assert relatorio["complexidade_informada"] == [{"rotulo": "Alta", "valor": 1}]
+    assert relatorio["cidades"] == [{"rotulo": "Fortaleza", "valor": 1}]
+    assert relatorio["bairros"] == [{"rotulo": "MEIRELES", "valor": 1}]
+    assert relatorio["relatorios_pendentes_total"] == 1
+    assert relatorio["kpis"]["idade_media"] == 72 and relatorio["kpis"]["idosos"] == 1
+    assert analise.get("/api/analises/detalhe?tipo=idade&ini=2024-10-01&fim=2024-10-31").get_json()["total"] == 1
+    detalhe = analise.get(
+        "/api/analises/detalhe?tipo=relatorios_especialidade&valor=Fisioterapia&ini=2024-10-01&fim=2024-10-31"
+    ).get_json()
+    assert detalhe["linhas"] == [[
+        "RP-TESTE-1", "DADOSBI-TESTE-1", "Profissional de teste", "Fisioterapia",
+        "10/2024", "123", "456",
+    ]]
     cliente = admin()
     monitor = cliente.get("/api/integracoes/dadosbi/monitor").get_json()
     assert monitor["campos_monitorados"] > 0 and monitor["alertas_pendentes"] >= 3

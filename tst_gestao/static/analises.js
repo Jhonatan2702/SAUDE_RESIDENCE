@@ -83,6 +83,25 @@
     const svg = document.getElementById('mapa-for');
     if (!geoBairros) geoBairros = await fetch('/static/fortaleza-bairros.geojson').then(r => r.json()).catch(() => null);
     if (!geoBairros) return;
+    const bairrosValidos = geoBairros.features.every(f =>
+      typeof f.properties?.bairro === 'string' && f.properties.bairro.trim());
+    const wrapper = svg.closest('.mapa-wrap');
+    const total = d.bairros.reduce((s, b) => s + b.valor, 0);
+    if (!bairrosValidos) {
+      svg.hidden = true;
+      wrapper.classList.add('mapa-indisponivel');
+      document.getElementById('mapa-nota').textContent = total
+        ? `${fmt(total)} atendimentos ativos localizados · ${fmt(d.sem_localizacao)} sem bairro`
+        : 'Sem dados de bairro na API';
+      document.getElementById('mapa-lista').innerHTML = total
+        ? '<p class="desc">O mapa está indisponível porque a base cartográfica não contém nomes de bairros. Dados recebidos por bairro:</p>' +
+          '<b>Top bairros</b>' + d.bairros.slice(0, 20).map(b =>
+            `<div data-det="bairro" data-valor="${esc(b.rotulo)}"><span>${esc(b.rotulo)}</span><b>${fmt(b.valor)}</b></div>`).join('')
+        : '<p class="desc">Sem dados de bairro para exibir.</p>';
+      return;
+    }
+    svg.hidden = false;
+    wrapper.classList.remove('mapa-indisponivel');
     const qtd = new Map(d.bairros.map(b => [semAcento(b.rotulo), b.valor]));
     const max = Math.max(1, ...qtd.values());
     const pts = geoBairros.features.flatMap(f => f.geometry.coordinates.flat());
@@ -94,13 +113,12 @@
       const nome = f.properties.bairro, v = qtd.get(semAcento(nome)) || 0;
       const path = f.geometry.coordinates.map(a => 'M' + a.map(p => `${((p[0] - x0) * k * ea).toFixed(2)},${((y1 - p[1]) * ea).toFixed(2)}`).join('L') + 'Z').join('');
       const fill = v ? `rgba(37,99,235,${(0.2 + 0.8 * v / max).toFixed(2)})` : '#e2e8f0';
-      return `<path d="${path}" fill="${fill}" fill-rule="evenodd" stroke="#fff" stroke-width=".25"${v ? ` data-det="bairro" data-valor="${esc(nome)}"` : ''}><title>${esc(nome)} · ${fmt(v)} paciente(s)</title></path>`;
+      return `<path d="${path}" fill="${fill}" fill-rule="evenodd" stroke="#fff" stroke-width=".25"${v ? ` data-det="bairro" data-valor="${esc(nome)}"` : ''}><title>${esc(nome)} · ${fmt(v)} atendimento(s)</title></path>`;
     }).join('');
-    const total = d.bairros.reduce((s, b) => s + b.valor, 0);
     document.getElementById('mapa-nota').textContent = total ? `${fmt(total)} ativos localizados · ${fmt(d.sem_localizacao)} sem bairro` : 'Sem dados de bairro na API';
     document.getElementById('mapa-lista').innerHTML = total
       ? '<b>Top bairros</b>' + d.bairros.slice(0, 10).map(b => `<div data-det="bairro" data-valor="${esc(b.rotulo)}"><span>${esc(b.rotulo)}</span><b>${fmt(b.valor)}</b></div>`).join('')
-      : '<p class="desc">Aguardando a API enviar bairro/cidade dos pacientes. Assim que chegar, os bairros serão pintados aqui automaticamente.</p>';
+      : '<p class="desc">Aguardando a API enviar bairro/cidade dos atendimentos. Assim que houver dados, os bairros serão pintados aqui automaticamente.</p>';
   }
 
   let dados = null, escMotivo = 'mes';
@@ -139,6 +157,10 @@
         'Óbitos do período ÷ pacientes atendidos no período (admitidos até o fim do período e sem alta antes do início). Óbito = condição de alta "Óbito". Clique para ver quem foi a óbito.'],
       ['azul', 'Terapias pendentes', k.terapias_pendentes, 'pendentes', [['De', fmt(k.com_terapias) + ' com terapias', 'pendentes']],
         `Pacientes ativos com terapias (possui terapias = SIM) sem nenhuma visita nos últimos ${d.janela_terapia} dias. Aproximação: a API não informa a situação da terapia.`],
+      ['ambar', 'Relatórios pendentes', fmt(k.relatorios_pendentes), 'relatorios_especialidade', [['Na lista atual', 'da API', 'relatorios_especialidade']],
+        'Quantidade de relatórios pendentes informados pela lista atual da API. Não depende do filtro de período.'],
+      ['agua', 'Idade média dos ativos', k.idade_media.toLocaleString('pt-BR') + ' anos', 'idade', [['60+ anos', fmt(k.idosos), 'idade'], ['Com idade', fmt(k.idade_informada), 'idade']],
+        'Média da idade informada pela API nos atendimentos ativos na data final. 60+ anos conta os ativos idosos; Com idade mostra quantos têm idade válida. Clique para ver os atendimentos.'],
     ];
     document.getElementById('kpis').innerHTML = cards.map(([cor, rot, val, tipo, sub, explica]) =>
       `<div class="kpi ${cor}" data-det="${tipo}"><span>${esc(rot)}<span class="info claro" tabindex="0" data-info="${esc(explica)}"><svg class="ic"><use href="#i-info"/></svg></span></span><strong>${esc(val)}</strong>` +
@@ -173,6 +195,12 @@
     desenharMapa(d);
     desenharMotivos();
     barras('c-pend', d.pendentes_operadora, 'pendentes');
+    barras('c-idade', d.faixas_etarias, 'idade');
+    barras('c-diagnostico', d.diagnosticos, 'diagnostico');
+    barras('c-complexidade-api', d.complexidade_informada, 'complexidade_informada');
+    barras('c-cidade', d.cidades, 'cidade');
+    barras('c-relatorios-especialidade', d.relatorios_pendentes_especialidade, 'relatorios_especialidade');
+    barras('c-relatorios-profissional', d.relatorios_pendentes_profissional, 'relatorios_profissional');
 
     document.getElementById('t-prof').innerHTML = d.profissionais_atend.map(p =>
       `<tr data-det="profissional" data-valor="${esc(p['Profissional'])}"><td>${esc(p['Profissional'])}</td><td>${esc(p['Especialidade principal'])}</td>` +

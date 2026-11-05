@@ -88,6 +88,8 @@ TABELAS: dict[str, dict] = {
         _t("operadora_id", 40), _t("operadora", 120), _t("servico", 120), _t("status_origem", 60),
         _t("data_admissao", 20), _t("data_alta", 20), _t("condicao_alta", 200),
         _t("possui_terapias", 20), _t("inicio_orcamento", 20), _t("fim_orcamento", 20),
+        _t("idade", 10), _t("diagnostico", 200), _t("complexidade", 120), _t("cidade", 120), _t("bairro", 120),
+        Col("relatorios_pendentes_json", "longo"),
         _t("sincronizado_em", 30, nn=True)]),
     "dadosbi_visitas_origem": dict(cols=[
         ID, _t("origem_id", 40, nn=True, unico=True), _t("atendimento_origem_id", 40, nn=True),
