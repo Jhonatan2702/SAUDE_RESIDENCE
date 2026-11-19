@@ -1,66 +1,59 @@
+"""Inicialização do banco local (usuários + espelho da URL) e perfis de acesso."""
 from __future__ import annotations
+
+import shutil
+from datetime import datetime
 
 from werkzeug.security import generate_password_hash
 
-from .banco import BASE_DIR, DATA_DIR, DB_PATH, Conexao, ErroIntegridade, conectar, criar_estrutura  # noqa: F401
+from .banco import DATA_DIR, DB_PATH, Conexao, ErroIntegridade, conectar, criar_estrutura, tabelas_existentes  # noqa: F401
 
-LISTAS = {
-    "operadoras": "Operadoras",
-    "empresas": "Empresas",
-    "profissionais": "Profissionais",
-    "diagnosticos": "Diagnósticos",
-    "motivos_alta": "Motivos de alta",
-    "complexidades": "Complexidade",
-    "servicos": "Serviços",
-    "situacoes": "Situações",
-    "frequencias": "Frequências",
-    "terapias": "Terapias",
-    "modalidades": "Modalidades",
-    "tipos_evolucao": "Tipos de registro do prontuário",
-    "categorias_anexo": "Categorias de anexo",
+# Perfis em ordem crescente de acesso. Cada perfil enxerga também tudo o que os anteriores enxergam.
+PERFIS = {
+    "operacional": {"nivel": 1, "rotulo": "Operacional",
+                    "descricao": "Somente o Painel operacional: relatórios pendentes, profissional × atendimento, "
+                                 "região de abrangência, fichas realizadas e tabela de preços."},
+    "gestor": {"nivel": 2, "rotulo": "Gestor",
+               "descricao": "Painel BI completo e Painel operacional, sem acesso às configurações."},
+    "admin": {"nivel": 3, "rotulo": "Administrador",
+              "descricao": "Acesso integral: painéis, usuários e integração com a URL."},
 }
+NIVEIS = {k: v["nivel"] for k, v in PERFIS.items()}
 
-SEEDS = {
-    "tipos_evolucao": ["Evolução", "Anamnese", "Intercorrência", "Orientação", "Visita", "Observação"],
-    "categorias_anexo": ["Documento", "Exame", "Receita", "Laudo", "Relatório", "Outros"],
-    "complexidades": ["Básico", "Intermediário", "Intensivo"],
-    "terapias": ["PSICO", "NUTRI", "TO", "FONO", "FISIO"],
-    "situacoes": ["Pendente", "Realizada", "Cancelada", "Suspensa"],
-    "frequencias": ["Diária", "Semanal", "Quinzenal", "Mensal"],
-    "modalidades": ["Domiciliar", "Ambulatorial", "Teleatendimento"],
-    "motivos_alta": ["Alta clínica", "Óbito", "Transferência", "Desistência", "Perda de elegibilidade"],
-}
-
-EVENTOS = ["Admissão", "Alta", "Óbito", "Internação", "Retorno"]
-NIVEIS = {"consulta": 1, "operador": 2, "gestor": 3, "admin": 4}
+# Tabelas da 1ª fase (planilha) e de recursos removidos: saem do banco na primeira execução da versão 2.
+LEGADAS = ["pacientes", "terapias", "movimentacao", "opcoes", "evolucoes", "anexos", "api_chaves",
+           "webhooks", "webhook_log", "dadosbi_visitas"]
 
 
 def connect() -> Conexao:
     return conectar()
 
 
-def garantir_opcao(conn: Conexao, lista: str, valor: str) -> None:
-    """Insere o valor na lista suspensa se ainda não existir (portável entre os motores)."""
-    try:
-        conn.execute(
-            f"INSERT INTO opcoes (lista, valor) SELECT ?, ? {conn.dual} "
-            "WHERE NOT EXISTS (SELECT 1 FROM opcoes WHERE lista = ? AND valor = ?)",
-            (lista, valor, lista, valor),
-        )
-    except ErroIntegridade:
-        conn.rollback()
+def _remover_legadas() -> None:
+    with connect() as conn:
+        presentes = [t for t in LEGADAS if t in tabelas_existentes(conn)]
+        if not presentes:
+            return
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+    # cópia de segurança do arquivo antes de apagar qualquer coisa
+    shutil.copy2(DB_PATH, DATA_DIR / f"backup_antes_v2_{datetime.now():%Y%m%d_%H%M%S}.db")
+    with connect() as conn:
+        for t in presentes:
+            conn.execute(f"DROP TABLE {t}")
+    with connect() as conn:
+        conn.raw.isolation_level = None
+        conn.execute("VACUUM")
 
 
 def init_db() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _remover_legadas()
     with connect() as conn:
         criar_estrutura(conn)
-        for lista, valores in SEEDS.items():
-            for v in valores:
-                garantir_opcao(conn, lista, v)
+        # níveis da versão anterior (consulta/operador) passam a ser o perfil Operacional
+        conn.execute("UPDATE usuarios SET nivel = 'operacional' WHERE nivel NOT IN ('operacional', 'gestor', 'admin')")
         if not conn.execute("SELECT 1 FROM usuarios").fetchone():
             conn.execute(
-                "INSERT INTO usuarios (usuario, nome, senha_hash, nivel, trocar_senha) "
-                "VALUES ('admin', 'Administrador', ?, 'admin', 1)",
+                "INSERT INTO usuarios (usuario, nome, senha_hash, nivel, trocar_senha) VALUES ('admin', 'Administrador', ?, 'admin', 1)",
                 (generate_password_hash("admin"),),
             )

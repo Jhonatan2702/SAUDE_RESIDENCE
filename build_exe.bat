@@ -26,9 +26,7 @@ echo Gerando executavel...
   --icon "tst_gestao\static\tst.ico" ^
   --add-data "tst_gestao\templates;tst_gestao\templates" ^
   --add-data "tst_gestao\static;tst_gestao\static" ^
-  --collect-all oracledb ^
   --hidden-import pystray._win32 ^
-  --hidden-import pyodbc ^
   main.py || goto :erro
 
 echo.

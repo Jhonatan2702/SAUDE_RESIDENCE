@@ -1,0 +1,20 @@
+# Dados locais: espelho da URL, usuários e chave de sessão (dados pessoais e de saúde: nunca versionar)
+dados/
+dist/dados/
+
+# Artefatos de build e ambiente
+build/
+dist/
+*.spec
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Documentos de trabalho (planilha, PDFs, apresentação): ficam só nesta máquina
+_arquivo/
+*.lnk
+*.xlsx
+
+# Chave privada da assinatura das atualizações: NUNCA versionar
+chaves/

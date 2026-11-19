@@ -1,4 +1,7 @@
 {% extends "base.html" %}
-{% block titulo %}Acesso negado{% endblock %}
-{% block cabecalho %}Acesso negado{% endblock %}
-{% block conteudo %}<div class="card"><p>{{ mensagem }}</p></div>{% endblock %}
+{% block titulo %}{{ 'Acesso negado' if codigo == 403 else 'Não encontrado' if codigo == 404 else 'Erro' }}{% endblock %}
+{% block cabecalho %}{{ 'Acesso negado' if codigo == 403 else 'Não encontrado' if codigo == 404 else 'Não foi possível concluir' }}{% endblock %}
+{% block conteudo %}
+<div class="card"><div class="vazio"><svg class="ic"><use href="#i-aviso"/></svg><b>{{ mensagem }}</b>
+  <p><a href="{{ url_for('auth.inicio') }}">Voltar para a minha página inicial</a></p></div></div>
+{% endblock %}

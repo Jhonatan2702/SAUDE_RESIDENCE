@@ -1,65 +1,130 @@
 # TST-GESTÃO
 
-Sistema de gestão local (Flask + SQLite) com login, níveis de acesso, cadastros e painel BI.
+Painéis de acompanhamento (Flask + SQLite) alimentados **exclusivamente** pela URL de dados da Saúde Residence.
 
-## Instalação (para quem baixar o projeto)
-Dê duplo clique em **`install.bat`**: ele localiza (ou instala via winget) o Python 3.10+, cria o ambiente `.venv`, instala as dependências e cria os atalhos **TST-GESTÃO** na Área de Trabalho. Requer Windows e internet na primeira vez.
+O sistema não tem cadastro próprio de pacientes. O banco local (SQLite) guarda apenas:
+- os **usuários** e seus perfis de acesso;
+- o **espelho da URL** (tabelas `dadosbi_*`), atualizado na inicialização e **a cada hora**.
 
-## Gerar executável para Windows
-Execute **`build_exe.bat`** depois de instalar o projeto. O script cria um executável único em `dist\TST-GESTAO.exe`; Python não precisa estar instalado no computador que vai executar o arquivo. Para distribuição, envie o EXE (e opcionalmente um atalho para ele). O primeiro uso cria `dist\dados` ao lado do executável. Essa pasta contém o banco, configurações e anexos, portanto deve ser mantida e incluída nos backups; ela não é embutida no EXE. A geração exige internet para instalar o PyInstaller na primeira vez.
+> A primeira versão do projeto era baseada na planilha do Google Planilhas. Na versão 2 foram removidos cadastros manuais, importação de planilhas, prontuário, listas suspensas, relatórios sobre a planilha, API de entrada/saída, webhooks e a troca para SQL Server/Oracle: tudo vem da URL. Na primeira execução da versão 2, as tabelas antigas saem do banco e uma cópia completa fica em `dados\backup_antes_v2_*.db`.
 
-## Uso
-- Dê duplo clique no atalho **TST-GESTÃO** (Área de Trabalho ou pasta do projeto). Nenhum terminal é aberto.
-- O ícone aparece na bandeja do Windows (clique duplo = abrir, botão direito = Sair).
-- Primeiro acesso: `admin` / `admin` (a troca de senha é obrigatória).
-- Para recriar os atalhos: `.venv\Scripts\python.exe criar_atalhos.py`.
-- **Acesso pela rede local:** inicie o TST-GESTÃO no computador que hospeda os dados. Nesse computador, execute `ipconfig` e anote o endereço IPv4 da rede local. Nos outros dispositivos conectados à mesma rede, acesse `http://ENDEREÇO-IPv4:8765` (por exemplo, `http://192.168.1.25:8765`). Se o Windows perguntar, permita o acesso em redes privadas; caso não apareça o aviso e a conexão falhe, crie uma regra de entrada no Firewall do Windows para a porta TCP `8765`, limitada à rede privada.
+## Instalação e uso
+- **Instalar:** duplo clique em `install.bat` (Python 3.10+, ambiente `.venv`, dependências e atalhos na Área de Trabalho).
+- **Usar:** duplo clique no atalho **TST-GESTÃO**. O ícone fica na bandeja do Windows (duplo clique abre; botão direito → Sair).
+- **Primeiro acesso:** `admin` / `admin`, com troca de senha obrigatória.
+- **Rede local:** em outros computadores, acesse `http://IPv4-DO-SERVIDOR:8765` (libere a porta TCP 8765 no firewall, rede privada).
+- **Executável:** `build_exe.bat` gera `dist\TST-GESTAO.exe`. Os dados ficam em `dist\dados`, fora do EXE.
 
-## Níveis de acesso
-Consulta (visualiza) · Operador (cadastra/edita) · Gestor (exclui e gerencia listas) · Admin (tudo + usuários).
+> O espelho só é atualizado enquanto o aplicativo está aberto. Deixe o TST-GESTÃO rodando no computador servidor.
 
-## Dados
-Banco em `dados\tst_gestao.db` (faça backup copiando este arquivo). Erros de inicialização: `dados\erro.log`.
+> **Primeira instalação:** em *Integração com a URL*, informe o endereço da Saúde Residence. Ele fica só em `dados\config.json` (nunca dentro do programa, que é publicado para as atualizações).
 
-## Regras do BI
-- Altas, admissões e óbitos vêm da tabela MOVIMENTACAO; cadastrar admissão/alta no paciente gera o evento automaticamente, e registrar o evento atualiza o paciente.
-- Distribuições (bairro, cidade, complexidade, idade, diagnóstico, serviço, operadora) consideram pacientes ativos (sem data de alta).
-- Mortalidade = óbitos do período ÷ pacientes expostos no período (admitidos até o fim e sem alta antes do início).
-- Pendências = pacientes ativos distintos com terapia “Pendente” nos meses do período selecionado.
-- O indicador de monitoramento conta pacientes ativos distintos com terapia registrada no período; o gráfico por terapia também conta pacientes distintos por tipo e mês. Um paciente pode constar em mais de um tipo de terapia.
-- A quantidade de pacientes com terapias pendentes é contada sem duplicar quem tem mais de um profissional para o mesmo tipo. A cobertura por bairro/profissional considera os bairros dos pacientes ativos com terapia cadastrada no período, não a disponibilidade de agenda.
-- O indicador de mortalidade pode ser clicado para consultar os eventos de óbito que compõem a taxa no período.
+## Atualizações automáticas (com assinatura digital)
+Só o computador servidor precisa ser atualizado: quem acessa pelo navegador já vê a versão nova.
 
-## Integrações API (menu *Integrações API*, somente Admin)
-- **Chaves de API** (leitura ou escrita) geradas na tela; a chave é exibida uma única vez e guardada apenas como hash.
-- **Saída:** `GET /api/v1/pacientes|terapias|movimentacao` (filtros, `limit`/`offset`) e `GET /api/v1/indicadores`.
-- **Entrada:** `POST /api/v1/pacientes|terapias|movimentacao` (objeto ou lista, upsert) e `POST /api/v1/importar/<recurso>` (.xlsx/.csv). A tela também permite importar planilhas.
-- **Webhooks:** POST JSON assinado (`X-TST-Signature: sha256=HMAC`) nos eventos `paciente.criado/atualizado`, `terapia.criada/atualizada`, `movimentacao.criada`.
-- **Saúde Residence BI:** a API `/dadospaciente` retorna episódios de atendimento (IDs de admissão/serviço), não o cadastro-base de pacientes: uma pessoa pode aparecer em vários IDs, e as visitas apontam para o ID do atendimento. A aplicação sincroniza esses atendimentos e visitas em tabelas próprias na inicialização e a cada hora; Admin também pode sincronizar pela tela. Idade, diagnóstico, complexidade, cidade, bairro e relatórios pendentes da resposta alimentam as análises da API; os dados continuam separados do cadastro principal. A integração não cria nem altera pacientes ou prontuários e não exclui registros ausentes da resposta. A URL padrão pode ser substituída pela variável `TST_DADOSBI_URL`. A URL atual usa HTTP sem criptografia: solicite HTTPS e restrinja o acesso à rede autorizada.
-- **Monitor da API Saúde Residence:** cada sincronização compara campos e tipos JSON com a primeira resposta observada e detecta novas categorias de status, serviço, operadora e terapias. Alertas persistentes aparecem em Integrações API; com a página aberta, ela verifica novidades a cada minuto. Para receber avisos fora do aplicativo, configure um webhook para `dadosbi.esquema_alterado`. O monitor guarda apenas caminhos/tipos de campos e categorias selecionadas, não nomes de pacientes ou valores de visitas.
-- A aplicação escuta na rede local na porta `8765`. Exemplos completos na própria tela.
+**No computador do cliente (administrador):** quando existe versão nova, aparece o aviso *"Nova versão disponível"*. Em *Integração com a URL → Atualizações do sistema* você vê as novidades e clica em **Atualizar agora**, que pede confirmação. O sistema baixa, confere a assinatura e reinicia em segundos. A pasta `dados` é mantida, e a versão anterior fica guardada como `TST-GESTAO.antigo.exe`: para voltar, feche o aplicativo e renomeie esse arquivo para `TST-GESTAO.exe`. A consulta é automática a cada 6 horas, ou pelo botão *Buscar atualizações* (também no menu do ícone da bandeja).
 
-## Prontuário do paciente
-- Botão **Prontuário** em cada linha de *Pacientes*: ficha, **linha do tempo** (evoluções, movimentações, terapias e anexos), evoluções e anexos.
-- Registros clínicos (operador+): tipo, profissional e texto, com autor e data/hora; não são editáveis, apenas excluídos por Gestor+.
-- Anexos (operador+): documentos, exames, receitas, laudos, relatórios e outros (pdf, imagens, doc/docx, xls/xlsx, csv, txt; até 20 MB). Ficam em `dados\anexos\` — inclua essa pasta no backup junto com o `.db`.
-- Os tipos de registro e as categorias de anexo são editáveis em *Listas suspensas*.
+**Assinatura digital:** cada versão é assinada com uma chave que só existe no computador de quem publica (`chaves\atualizacao_privada.pem`). O sistema instalado tem a chave pública correspondente e **recusa qualquer arquivo que não tenha sido assinado por ela**. Assim, mesmo que alguém troque o arquivo no GitHub, a atualização falsa não é instalada.
+- **Faça backup da pasta `chaves\`** (pen drive ou cofre de senhas). Sem ela, os computadores instalados não aceitarão novas versões e será preciso reinstalar manualmente.
+- A pasta `chaves\` está no `.gitignore` e nunca deve ir para o GitHub.
 
-## Banco de dados (menu *Banco de dados*, somente Admin)
-Permite testar, criar a estrutura, migrar os dados e passar a usar **SQL Server** ou **Oracle** no lugar do SQLite.
-- SQL Server: requer ODBC Driver 17/18; o banco pode ser criado pela tela (inclui LocalDB `(localdb)\MSSQLLocalDB`).
-- Oracle: o usuário/schema precisa existir com permissão de criar tabelas (conexão direta, sem Oracle Client).
-- A migração preserva os códigos, confere as contagens e desfaz tudo em caso de erro. Anexos continuam em `dados\anexos`.
-- A configuração fica em `dados\banco.json` (senha protegida pelo Windows). Para voltar ao SQLite, apague esse arquivo.
-- Validado em SQL Server real (LocalDB); Oracle validado por testes de tradução de SQL/DDL.
+**Para publicar uma versão nova (no seu computador):**
+1. Aumente `VERSAO` em `tst_gestao/versao.py` (ex.: `2.1.0` → `2.1.1`).
+2. Rode `publicar_atualizacao.bat "O que mudou nesta versão"`. Ele gera o `.exe`, assina e publica no repositório **público** de versões `Jhonatan2702/tst-gestao-atualizacoes` (só os executáveis, sem código-fonte nem dados).
+3. A publicação automática usa um token do GitHub em `chaves\github_token.txt`. Sem token, o script mostra o passo a passo para publicar pela página do GitHub.
+
+## Ajuda dentro do sistema
+- **Tour de boas-vindas:** abre sozinho no primeiro acesso de cada usuário e mostra menu, atualização dos dados, filtro de período, abas e como abrir as listas de pacientes.
+- **Tour de cada aba:** na primeira visita a uma aba aparece um convite; o botão **Tour desta tela**, no topo, refaz o tour quando quiser. O conteúdo dos tours fica em `tst_gestao/static/guia.js` e o teste `tests/test_ajuda.py` confere se todo elemento citado existe na tela.
+- **Ajuda e primeiros passos** (menu): como começar, de onde vêm os dados, rotina sugerida (diária, semanal, mensal), o que cada tela responde (com atalho para o tour), glossário e perguntas frequentes. Mostra só o que o perfil do usuário enxerga.
+
+## Perfis de acesso
+| Perfil | Página inicial | Acesso |
+|---|---|---|
+| **Operacional** | Painel operacional | Relatórios pendentes · Profissional × atendimento · Região de abrangência · Fichas realizadas no App · Tabela de preços |
+| **Gestor** | Painel BI | Painel BI completo + Painel operacional |
+| **Administrador** | Painel BI | Tudo, incluindo Usuários e Integração com a URL |
+
+Os níveis da versão anterior (Consulta e Operador) são convertidos automaticamente para **Operacional**.
+
+## Painel BI (Gestor e Administrador)
+Organizado em abas; todo número é clicável e abre a lista de pacientes que o compõe (com busca e exportação CSV).
+
+- **Visão geral:** pacientes ativos, monitoramento com terapias, mortalidade, pacientes com terapia pendente, admissões e altas, visitas, ativos sem visita, relatórios pendentes e **orçamentos vencidos**; situação dos orçamentos dos atendimentos ativos; séries mensais de visitas e de admissões, altas e óbitos.
+- **Ficha do bairro:** clicar num bairro (mapa, rankings, tabelas de abrangência) abre zonas, profissionais, pacientes com terapias e pendências, relatórios e operadoras do bairro, descendo até o histórico de cada paciente. Link direto: `/painel?bairro=Meireles#mapa`.
+- **Mapa por bairro:** mapa de Fortaleza pintado pelo indicador escolhido (pacientes ativos, em terapia, terapia pendente, visitas, profissionais, relatórios pendentes), com filtro por terapia, destaque de uma zona de atendimento e ranking de bairros e de zonas.
+- **Terapias:** número de pacientes por terapia (Fisio, Fono, TO, Nutri, Psico), pacientes com terapia pendente por terapia e visitas do período por terapia.
+- **Complexidade:** Básico (1–2 terapias), Intermediário (3) e Intensivo (4 ou mais), com o cruzamento complexidade × terapia.
+- **Movimentação e mortalidade:** quadro dia · mês · ano, motivos de alta, mortalidade por mês e lista de **quem foi a óbito** no período.
+- **Perfil dos pacientes:** operadoras, serviços, diagnósticos, faixa etária, cidades e mapa de bairros de Fortaleza.
+- **Profissionais:** profissional × atendimentos, relatórios pendentes por terapia e disponibilidade de bairro por profissional.
+
+## Regras de cálculo
+- **Atendimento:** episódio enviado pela URL (id da admissão). **Paciente:** pessoa distinta, identificada pelo nome normalizado (sem acento, maiúsculas e espaços extras), porque a URL não envia CPF ou código. Homônimos são contados como uma pessoa.
+- **Ativo na data:** atendimento admitido até a data e sem alta até ela; sem data de alta, vale o status da URL.
+- **Terapia:** especialidade da visita (Fisioterapia → FISIO, Fonoaudiologia → FONO, Terapeuta Ocupacional → TO, Nutricionista → NUTRI, Psicólogo → PSICO).
+- **Pacientes por terapia:** pacientes ativos com ao menos uma visita da terapia nos **últimos 90 dias** até a data final.
+- **Complexidade:** quantidade de terapias diferentes que o paciente ativo recebeu nos últimos 90 dias.
+- **Terapia pendente:** paciente ativo indicado com terapias (`possuiterapias = SIM`) que fez a terapia nos últimos 90 dias, mas está há mais de **15 dias** sem visita dela. Também conta quem é indicado com terapias e não teve nenhuma visita de terapia em 90 dias.
+- **Monitoramento com terapias:** pacientes ativos no serviço *Monitoramento* com `possuiterapias = SIM`.
+- **Mortalidade:** pacientes que foram a óbito no período (condição de alta “Óbito”) ÷ pacientes atendidos no período (admitidos até o fim e sem alta antes do início) × 100.
+- **Altas:** não incluem óbitos, que são contados à parte.
+- **Bairro:** convertido para o nome oficial dos 121 bairros de Fortaleza (erros de digitação, abreviações e nomes antigos estão em `ALIAS_BAIRRO`, em `fonte.py`). Bairros de outras cidades ficam como vieram.
+- **Zona de atendimento:** campo `zoneamento` da URL (id, nome e bairros). Pacientes contam pela zona do atendimento mais recente que tenha zona.
+- **Orçamento:** situação do orçamento de cada atendimento ativo na data final: vencido (fim antes da data), vence em até 7 dias, em 8 a 30 dias, vigente por mais de 30 dias ou sem orçamento.
+
+## Painel operacional (todos os perfis)
+- **Relatórios pendentes:** lista atual da URL, com filtros por terapia e busca, agrupada por terapia, profissional e competência (as mais antigas primeiro).
+- **Profissional × atendimento:** profissionais com visitas no período; clique para ver os pacientes de cada um.
+- **Região de abrangência:** mapa de cobertura (profissionais por bairro, bairros sem cobertura em vermelho, região de um profissional escolhido), cobertura por **zona de atendimento** e tabela profissional × zona × bairro. É a cobertura observada nas visitas, não a agenda do profissional.
+- **Fichas realizadas no App:** cada visita enviada pela URL é uma ficha registrada no App.
+- **Tabela de preços:** aguardando a URL enviar valores por empresa.
+
+## Campos da URL e onde são usados
+A URL libera campos aos poucos; o monitor de alterações (Integração com a URL) avisa quando surge um campo novo.
+
+| Campo | Desde | Uso |
+|---|---|---|
+| `id`, `nmpaciente`, `status`, `dataadmissao`, `dataalta`, `condicaoalta` | início | pacientes ativos, admissões, altas, óbitos e mortalidade |
+| `nmoperadora`, `nmservico`, `possuiterapias` | início | perfil, monitoramento com terapias, pendências |
+| `datainicioorcamento`, `datafimorcamento` | início | situação dos orçamentos (desde a versão 2) |
+| `visitas[]` (data, profissional, especialidade) | início | terapias, complexidade, pendências, profissionais, fichas, abrangência |
+| `idade`, `diagnostico`, `complexidade`, `cidade`, `bairro` | 05/11/2026 | perfil dos pacientes, mapa, complexidade informada |
+| `relatoriospendentes[]` | 05/11/2026 | relatórios pendentes |
+| `zoneamento` (id, nome, bairros) | 18/11/2026 | zonas de atendimento no mapa e na cobertura |
+
+Não usados de propósito: `idoperadora` e `idespecialidade` (o nome já identifica) e `relatoriospendentes[].id` (exibido só na lista).
+
+## O que a URL ainda não envia
+Preços por empresa, tipo de ficha ou relatório realizado, situação detalhada da terapia (frequência, sessões), telefone, data de nascimento e um identificador único do paciente. Quando a equipe de dados incluir esses campos, o **monitor de alterações** (Integração com a URL) avisa que surgiram campos novos.
+
+## Integração com a URL (Administrador)
+- Status da última sincronização, botão **Sincronizar agora** e contagem do espelho.
+- **Monitor de alterações:** compara campos, tipos e categorias a cada resposta, sem guardar dados de pacientes.
+- A URL é configurada na própria tela (fica em `dados\config.json`) ou pela variável `TST_DADOSBI_URL`. A URL atual usa **HTTP sem criptografia**: solicite HTTPS à equipe de dados.
+- Registros que deixam de vir na resposta não são apagados, para que uma resposta parcial não esvazie os painéis.
+
+## Backup
+O banco fica em `dados\tst_gestao.db`. Como o espelho é refeito pela URL, o essencial no backup é a tabela de usuários: copie o arquivo com o aplicativo fechado.
+
+## Estrutura do código
+```
+main.py                  inicialização: servidor, janela, bandeja e agendamento do espelho
+tst_gestao/
+  app.py                 cria a aplicação e registra as áreas
+  seguranca.py           sessão, CSRF e perfis de acesso
+  espelho.py             sincronização da URL → banco local, monitor de formato e status
+  fonte.py               leitura do espelho (com cache) e regras comuns (paciente, ativo, terapia)
+  painel.py              cálculos do Painel BI e detalhamentos
+  operacional.py         cálculos do Painel operacional
+  banco.py, db.py        SQLite, estrutura e inicialização (inclui a limpeza das tabelas da versão 1)
+  rotas/                 auth.py · paineis.py · admin.py
+  templates/, static/    telas; app.css é o sistema de design (tokens → componentes → páginas)
+tests/                   pytest com uma URL simulada (cenário controlado)
+```
 
 ## Testes
 `.venv\Scripts\python.exe -m pytest tests`
 
-## Relatórios
-
-Menu **Relatórios** (todos os níveis de acesso): um relatório para cada análise do Painel BI (altas, motivos de alta, admissões, pendências por terapia, mortalidade, bairro/cidade, complexidade, idade, diagnóstico, serviço/operadora) e três listagens (pacientes, terapias, movimentação).
-
-- Filtros por período (dia/mês/ano + data de referência), mês ou situação, conforme o relatório.
-- **Imprimir / Salvar PDF**: layout A4 paisagem com cabeçalho, logo, filtros, data/usuário e numeração de páginas. Na janela de impressão escolha "Salvar como PDF".
-- **CSV (Excel)**: exporta as mesmas tabelas (separador `;`, UTF-8).
+## Dados e privacidade
+A pasta `dados\` contém nomes e diagnósticos de pacientes e a chave de sessão; `_arquivo\` guarda documentos de trabalho (planilha, PDFs, apresentação). As duas estão no `.gitignore` e **não devem ser versionadas nem enviadas ao GitHub**.

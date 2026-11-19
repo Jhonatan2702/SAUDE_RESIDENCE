@@ -5,22 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Entrar · TST-GESTÃO</title>
 <link rel="icon" href="{{ url_for('static', filename='logo.png') }}">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
-<body class="login-page">
-<section class="login-hero"><img src="{{ url_for('static', filename='logo.png') }}" alt="TST"><h1>TST-GESTÃO</h1><p>Sistema de gestão de pacientes, terapias e indicadores assistenciais.</p></section>
-<section class="login-card">
-  <h2>Acesse sua conta</h2>
-  <form method="post" autocomplete="off">
+<body class="login">
+<div class="login-caixa">
+  <section class="login-marca">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="">
+    <h1>TST-GESTÃO</h1>
+    <p>Painéis de acompanhamento de pacientes, terapias e equipe, atualizados automaticamente a cada hora com os dados da Saúde Residence.</p>
+  </section>
+  <form class="login-form" method="post" autocomplete="off">
+    <h2>Acesse sua conta</h2>
     <input type="hidden" name="csrf_token" value="{{ session.get('csrf', '') }}">
     <label>Usuário<input name="usuario" required autofocus></label>
     <label>Senha<input name="senha" type="password" required></label>
     {% if erro %}<div class="alert">{{ erro }}</div>{% endif %}
-    <button class="btn primary block" type="submit">Entrar</button>
+    <button class="btn primario bloco" type="submit">Entrar</button>
+    <small class="muted">Esqueceu a senha? Peça ao administrador do sistema.</small>
   </form>
-  <small class="muted">Primeiro acesso: usuário <b>admin</b>, senha <b>admin</b> (será solicitada a troca).</small>
-</section>
+</div>
 </body>
 </html>

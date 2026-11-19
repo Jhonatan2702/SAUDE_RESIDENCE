@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% import "_ui.html" as ui %}
+{% block titulo %}Painel BI{% endblock %}
+{% block trilha %}Gestão{% endblock %}
+{% block cabecalho %}Painel BI{% endblock %}
+{% block subtitulo %}<p id="sub-periodo">Indicadores calculados com os dados da URL Saúde Residence.</p>{% endblock %}
+{% block acoes %}{{ ui.periodo(hoje) }}{% endblock %}
+{% block conteudo %}
+<div class="barra-abas"><div class="abas" role="tablist">
+  {% for chave, nome in abas %}<button type="button" role="tab" data-aba="{{ chave }}">{{ nome }}</button>{% endfor %}
+</div></div>
+
+{# ------------------------------------------------------------ Visão geral #}
+<section class="aba" id="aba-geral">
+  <div class="kpis" id="k-geral"></div>
+  <div class="grade g2">
+    <div class="card">{{ ui.cab('Orçamentos dos atendimentos ativos', 'Situação do orçamento (autorização) de cada atendimento ativo na data final, pelas datas de início e fim de orçamento enviadas pela URL. Vencido = data de fim anterior à data final do período. Clique numa linha para ver os atendimentos.', nota_id='orc-nota') }}
+      <p class="card-desc">Atendimentos em andamento que precisam de renovação de orçamento junto à operadora.</p>
+      <div class="lbar" id="l-orc"></div></div>
+    <div class="card">{{ ui.cab('Visitas por mês', 'Visitas registradas pelos profissionais em cada mês. A série termina no mês da data final e mostra no mínimo 8 meses. Clique num ponto para ver as visitas.', 'série mensal') }}
+      <div class="grafico"><canvas id="c-visitas"></canvas></div></div>
+  </div>
+  <div class="grade g2">
+    <div class="card">{{ ui.cab('Admissões, altas e óbitos por mês', 'Atendimentos admitidos, com alta (exceto óbito) e com óbito em cada mês, pelas datas enviadas pela URL. Clique numa barra para ver os pacientes.', 'série mensal') }}
+      <div class="grafico"><canvas id="c-fluxo"></canvas></div></div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------ Mapa por bairro #}
+<section class="aba" id="aba-mapa">
+  <div class="mapa-barra">
+    <div class="seg" id="mapa-metrica">
+      <button type="button" data-m="ativos">Pacientes ativos</button><button type="button" data-m="em_terapia">Em terapia</button>
+      <button type="button" data-m="pendentes">Terapia pendente</button><button type="button" data-m="visitas">Visitas</button>
+      <button type="button" data-m="profissionais">Profissionais</button><button type="button" data-m="relatorios">Relatórios pendentes</button>
+    </div>
+    <select id="mapa-terapia" aria-label="Terapia"><option value="*">Todas as terapias</option></select>
+    <select id="mapa-zona" aria-label="Destacar zona"><option value="">Destacar uma zona de atendimento…</option></select>
+  </div>
+  <div class="grade g21">
+    <div class="card">{{ ui.cab('Fortaleza por bairro', 'Cada bairro é pintado pela quantidade do indicador escolhido: quanto mais escuro, maior. Pacientes contam pelo bairro do atendimento mais recente; visitas, profissionais e relatórios, pelo bairro do atendimento a que pertencem. Passe o mouse para ver os números do bairro e clique para fixá-lo.', nota_id='mapa-nota') }}
+      <p class="card-desc" id="mapa-desc"></p>
+      <svg id="mapa-svg" class="mapa-svg" viewBox="0 0 100 100" role="img" aria-label="Mapa de Fortaleza por bairro"></svg>
+      <div class="mapa-leg" id="mapa-leg"></div>
+      <p class="card-desc" id="mapa-fora" style="margin-top:10px"></p></div>
+    <div class="mapa-lado">
+      <div class="card bairro-info" id="mapa-info"></div>
+      <div class="card">{{ ui.cab('Zonas de atendimento', 'Zonas cadastradas no sistema do cliente e enviadas pela URL. Cada atendimento pertence a uma zona, que reúne vários bairros; um bairro pode estar em mais de uma zona. Pacientes contam pela zona do atendimento mais recente. Clique numa zona para ver a lista.', nota_id='mapa-zonas-nota') }}<div class="lbar" id="mapa-zonas"></div></div>
+      <div class="card">{{ ui.cab('Bairros com mais', nota_id='mapa-rank-nota') }}<div class="lbar" id="mapa-rank"></div></div>
+    </div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------ Terapias #}
+<section class="aba" id="aba-terapias">
+  <div class="kpis" id="k-terapias"></div>
+  <h2 class="secao">Pacientes por terapia</h2>
+  <div class="terapias" id="ter-blocos"></div>
+  <div class="grade g2">
+    <div class="card">{{ ui.cab('Pacientes com terapia pendente', 'Por terapia: paciente ativo, indicado com terapias pela URL, que fez a terapia nos últimos 90 dias mas está há mais de 15 dias sem visita dela. A última linha conta quem é indicado com terapias e não teve nenhuma visita de terapia em 90 dias. Um paciente pode estar pendente em mais de uma terapia.', nota_id='pend-nota',
+        desc='Quantos pacientes estão sem visita recente em cada terapia. Clique numa linha para ver quem são.') }}
+      <div class="lbar" id="l-pend"></div></div>
+    <div class="card">{{ ui.cab('Visitas no período, por terapia', 'Quantidade de visitas de cada terapia dentro do período selecionado.', 'no período') }}
+      <div class="grafico"><canvas id="c-ter-visitas"></canvas></div></div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------ Complexidade #}
+<section class="aba" id="aba-complexidade">
+  <p class="card-desc" id="cx-desc"></p>
+  <div class="niveis" id="niveis"></div>
+  <div class="grade g21">
+    <div class="card flush">{{ ui.cab('Complexidade × terapia', 'Pacientes de cada nível que fazem cada terapia. Um paciente Intermediário com Fisio, Fono e Nutri aparece nas três colunas da linha Intermediário. Clique num número para ver os pacientes.') }}
+      <p class="card-desc">Quais terapias compõem cada nível de complexidade.</p>
+      <div class="tabela-wrap livre"><table id="t-cx"></table></div></div>
+    <div class="card">{{ ui.cab('Complexidade informada pela URL', 'Campo “complexidade” enviado pela URL para o atendimento mais recente de cada paciente ativo. É diferente da classificação por quantidade de terapias ao lado.') }}
+      <div class="lbar" id="l-cx-url"></div></div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------ Movimentação e mortalidade #}
+<section class="aba" id="aba-movimentacao">
+  <div class="kpis" id="k-mov"></div>
+  <div class="grade g2">
+    <div class="card">{{ ui.cab('Dia · mês · ano', 'Altas, admissões, óbitos e mortalidade no dia, no mês e no ano da data final do filtro. Mortalidade = pacientes que foram a óbito ÷ pacientes atendidos no mesmo intervalo. Clique num número para ver os pacientes.', nota_id='dma-nota') }}
+      <div class="tabela-wrap livre"><table><thead><tr><th>Indicador</th><th class="num">Dia</th><th class="num">Mês</th><th class="num">Ano</th></tr></thead><tbody id="t-dma"></tbody></table></div></div>
+    <div class="card">{{ ui.cab('Motivos de alta', 'Condição de alta enviada pela URL para os atendimentos encerrados no dia, mês ou ano da data final.') }}
+      <div class="seg" id="mot-esc" style="margin-bottom:12px"><button type="button" data-esc="dia">Dia</button><button type="button" data-esc="mes">Mês</button><button type="button" data-esc="ano">Ano</button></div>
+      <div class="lbar" id="l-motivos"></div></div>
+  </div>
+  <div class="grade g2">
+    <div class="card">{{ ui.cab('Mortalidade por mês', 'Para cada mês: pacientes que foram a óbito no mês ÷ pacientes atendidos no mês × 100. Clique num ponto para ver quem foi a óbito.', '% ao mês') }}
+      <div class="grafico"><canvas id="c-mort"></canvas></div></div>
+    <div class="card flush">{{ ui.cab('Quem foi a óbito no período', 'Atendimentos com condição de alta “Óbito” e data de alta dentro do período selecionado.', nota_id='obitos-nota') }}
+      <p class="card-desc">Clique num paciente para ver o histórico de visitas.</p>
+      <div class="tabela-wrap" style="max-height:300px"><table id="t-obitos"></table></div></div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------ Perfil dos pacientes #}
+<section class="aba" id="aba-perfil">
+  <div class="grade g3">
+    <div class="card">{{ ui.cab('Operadoras', 'Pacientes ativos por operadora. Um paciente com atendimentos em duas operadoras conta nas duas.', 'top 10') }}<div class="lbar" id="l-oper"></div></div>
+    <div class="card">{{ ui.cab('Serviços', 'Pacientes ativos por serviço contratado (Monitoramento, Enfermagem domiciliar etc.). Um paciente com dois serviços conta nos dois.', 'top 10') }}<div class="lbar" id="l-serv"></div></div>
+    <div class="card">{{ ui.cab('Diagnósticos', 'Diagnóstico do atendimento mais recente de cada paciente ativo.', 'top 10') }}<div class="lbar" id="l-diag"></div></div>
+  </div>
+  <div class="grade g2">
+    <div class="card">{{ ui.cab('Faixa etária', 'Idade enviada pela URL para o atendimento mais recente de cada paciente ativo.', nota_id='idade-nota') }}<div class="grafico baixo"><canvas id="c-idade"></canvas></div></div>
+    <div class="card">{{ ui.cab('Cidades', 'Cidade do atendimento mais recente de cada paciente ativo.', 'top 10') }}<div class="lbar" id="l-cid"></div></div>
+  </div>
+</section>
+
+{# ------------------------------------------------------------ Profissionais #}
+<section class="aba" id="aba-profissionais">
+  <div class="grade g21">
+    <div class="card flush">{{ ui.cab('Profissional × atendimentos', 'Profissionais com visitas no período: visitas, pacientes distintos, dias com visita e bairros atendidos. Clique numa linha para ver as visitas.', 'top 15 do período') }}
+      <div class="tabela-wrap" style="max-height:420px"><table id="t-prof"></table></div></div>
+    <div class="card">{{ ui.cab('Relatórios pendentes por terapia', 'Lista atual de relatórios pendentes enviada pela URL (não depende do período).', nota_id='rel-nota') }}<div class="lbar" id="l-rel"></div></div>
+  </div>
+  <div class="card flush">{{ ui.cab('Disponibilidade de bairro por profissional', 'Bairros onde cada profissional atendeu pacientes no período, com pacientes distintos e visitas. Mostra a cobertura observada nas visitas, não a agenda do profissional. Use a busca para encontrar quem atende um bairro.') }}
+    <div class="barra-tab"><input type="search" class="busca" id="abr-busca" placeholder="Buscar profissional ou bairro…"><span class="contador" id="abr-n"></span></div>
+    <div class="tabela-wrap"><table id="t-abr"></table></div></div>
+</section>
+
+{{ ui.detalhe() }}
+{{ ui.ficha() }}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+<script src="{{ url_for('static', filename='graficos.js') }}"></script>
+<script src="{{ url_for('static', filename='mapa.js') }}"></script>
+<script src="{{ url_for('static', filename='ficha.js') }}"></script>
+<script src="{{ url_for('static', filename='painel.js') }}"></script>
+{% endblock %}

@@ -4,63 +4,70 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf" content="{{ csrf_token }}">
+<meta name="usuario" content="{{ usuario['usuario'] if usuario else '' }}">
 <title>{% block titulo %}{% endblock %} · TST-GESTÃO</title>
 <link rel="icon" href="{{ url_for('static', filename='logo.png') }}">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
-<script>try { if (localStorage.getItem('tst-menu') === 'recolhido') document.documentElement.classList.add('menu-recolhido'); } catch (e) {}</script>
 </head>
 <body>
 {% include "_icones.html" %}
-{% set COR_IC = {'evolucao': '#f87171', 'bi': '#38bdf8', 'relatorios': '#a78bfa', 'pacientes': '#34d399', 'terapias': '#f472b6', 'movimentacao': '#fbbf24', 'listas': '#60a5fa', 'usuarios': '#fb923c', 'integracoes': '#2dd4bf', 'banco': '#c084fc'} %}
-{% macro item(rota, chave, icone, texto) %}<a href="{{ rota }}" class="{{ 'on' if ativa == chave }}" data-tip="{{ texto }}" style="--ic:{{ COR_IC.get(icone, '#94a3b8') }}"><svg class="ic"><use href="#i-{{ icone }}"/></svg><span class="tx">{{ texto }}</span></a>{% endmacro %}
-{% set grupo = {'dashboard': 'Análises', 'analises': 'Análises', 'relatorios': 'Análises', 'pacientes': 'Cadastros', 'terapias': 'Cadastros', 'movimentacao': 'Cadastros',
-  'listas': 'Configurações', 'usuarios': 'Configurações', 'integracoes': 'Configurações', 'banco': 'Configurações', 'perfil': 'Minha conta'} %}
-<aside class="sidebar">
-  <div class="brand"><img src="{{ url_for('static', filename='logo.png') }}" alt="TST"><div class="tx"><strong>TST-GESTÃO</strong><small>Gestão de pacientes</small></div></div>
+{% macro item(rota, chave, icone, texto, aba='') %}<a href="{{ rota }}" class="{{ 'on' if ativa == chave and not aba }}"{% if aba %} data-menu-aba="{{ aba }}"{% endif %} title="{{ texto }}"><svg class="ic"><use href="#i-{{ icone }}"/></svg><span>{{ texto }}</span></a>{% endmacro %}
+<div class="app">
+<aside class="menu">
+  <div class="marca"><img src="{{ url_for('static', filename='logo.png') }}" alt=""><div><b>TST-GESTÃO</b><small>Painéis de acompanhamento · v{{ versao }}</small></div></div>
   <nav>
-    <span class="nav-sec">Análises</span>
-    <div class="nav-grupo">
-    {{ item(url_for('index'), 'dashboard', 'bi', 'Painel BI') }}
-    {{ item(url_for('analises'), 'analises', 'evolucao', 'Análises API') }}
-    {{ item(url_for('relatorios'), 'relatorios', 'relatorios', 'Relatórios') }}
-    </div>
-    <span class="nav-sec">Cadastros</span>
-    <div class="nav-grupo">
-    {{ item(url_for('cadastro', ent='pacientes'), 'pacientes', 'pacientes', 'Pacientes') }}
-    {{ item(url_for('cadastro', ent='terapias'), 'terapias', 'terapias', 'Terapias') }}
-    {{ item(url_for('cadastro', ent='movimentacao'), 'movimentacao', 'movimentacao', 'Movimentação') }}
-    </div>
-    {% if nivel >= 3 %}<span class="nav-sec">Configurações</span>
-    <div class="nav-grupo">
-    {{ item(url_for('listas'), 'listas', 'listas', 'Listas suspensas') }}
-    {% if nivel >= 4 %}{{ item(url_for('usuarios'), 'usuarios', 'usuarios', 'Usuários e acessos') }}
-    {{ item(url_for('integracoes'), 'integracoes', 'integracoes', 'Integrações API') }}
-    {{ item(url_for('pagina_banco'), 'banco', 'banco', 'Banco de dados') }}{% endif %}
-    </div>{% endif %}
-    <button type="button" class="recolher" id="btn-recolher" data-tip="Expandir menu"><svg class="ic"><use href="#i-recolher"/></svg><span class="tx">Recolher menu</span></button>
+    {% if nivel >= 2 %}
+    <span class="menu-sec">Gestão</span>
+    {{ item(url_for('paineis.painel'), 'painel', 'bi', 'Painel BI') }}
+    {% endif %}
+    <span class="menu-sec">Operacional</span>
+    {{ item(url_for('paineis.operacional') + '#relatorios', 'operacional', 'relatorios', 'Relatórios pendentes', 'relatorios') }}
+    {{ item(url_for('paineis.operacional') + '#profissional', 'operacional', 'profissional', 'Profissional × atendimento', 'profissional') }}
+    {{ item(url_for('paineis.operacional') + '#abrangencia', 'operacional', 'bairro', 'Região de abrangência', 'abrangencia') }}
+    {{ item(url_for('paineis.operacional') + '#fichas', 'operacional', 'prontuario', 'Fichas realizadas no App', 'fichas') }}
+    {{ item(url_for('paineis.operacional') + '#precos', 'operacional', 'dinheiro', 'Tabela de preços', 'precos') }}
+    {% if nivel >= 3 %}
+    <span class="menu-sec">Administração</span>
+    {{ item(url_for('admin.usuarios'), 'usuarios', 'usuarios', 'Usuários e perfis') }}
+    {{ item(url_for('admin.integracao'), 'integracao', 'integracoes', 'Integração com a URL') }}
+    {% endif %}
+    <span class="menu-sec">Ajuda</span>
+    {{ item(url_for('auth.ajuda'), 'ajuda', 'info', 'Ajuda e primeiros passos') }}
   </nav>
-  <div class="userbox">
-    <a href="{{ url_for('perfil') }}" class="{{ 'on' if ativa == 'perfil' }}" title="Meu perfil"><span class="avatar">{{ usuario['nome'][:1]|upper }}</span><span class="tx"><b>{{ usuario['nome'] }}</b><small>{{ usuario['nivel']|capitalize }}</small></span></a>
-    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn ghost sm" type="submit" title="Sair do sistema"><svg class="ic"><use href="#i-sair"/></svg><span class="tx">Sair</span></button></form>
+  {% if sinc and sinc.ultima_sucesso %}
+  <div class="sinc{{ ' erro' if sinc.status == 'erro' }}" title="Os dados vêm da URL Saúde Residence e são atualizados a cada {{ sinc.intervalo_min }} minutos.">
+    <b><i></i>{{ 'Última atualização falhou' if sinc.status == 'erro' else 'Dados atualizados' }}</b>
+    {{ sinc.ultima_sucesso[8:10] }}/{{ sinc.ultima_sucesso[5:7] }} às {{ sinc.ultima_sucesso[11:16] }} · a cada {{ sinc.intervalo_min }} min
   </div>
+  {% elif usuario %}
+  <div class="sinc sem"><b><i></i>Aguardando a 1ª sincronização</b>Os dados vêm da URL Saúde Residence.</div>
+  {% endif %}
+  {% if usuario %}
+  <div class="conta">
+    <a href="{{ url_for('auth.perfil') }}" title="Minha conta"><span class="avatar">{{ usuario['nome'][:1]|upper }}</span>
+      <span class="tx"><b>{{ usuario['nome'] }}</b><small>{{ perfis[usuario['nivel']].rotulo if usuario['nivel'] in perfis else usuario['nivel'] }}</small></span></a>
+    <form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn sm" type="submit" title="Sair"><svg class="ic"><use href="#i-sair"/></svg></button></form>
+  </div>
+  {% endif %}
 </aside>
-<main class="content">
-  {% set ic_pag = {'dashboard': 'bi', 'analises': 'evolucao', 'perfil': 'perfil'}.get(ativa, ativa) %}
-  {% block topo %}<header class="bi-topo topo-pag"><div class="bt-tit"><i class="bt-ic"><svg class="ic"><use href="#i-{{ ic_pag or 'bi' }}"/></svg></i><span class="bt-trilha">{% block trilha %}{{ grupo.get(ativa, 'TST-GESTÃO') }}{% endblock %} <b>›</b></span><h1>{% block cabecalho %}{% endblock %}</h1></div><div class="actions">{% block acoes %}{% endblock %}</div></header>{% endblock %}
+<main class="pagina">
+  {% if nova_versao and ativa != 'integracao' %}<div class="aviso-versao"><svg class="ic"><use href="#i-info"/></svg>
+    <span>Nova versão <b>{{ nova_versao.versao }}</b> do TST-GESTÃO disponível.</span><a class="btn primario sm" href="{{ url_for('admin.integracao') }}#atualizacoes">Ver novidades e atualizar</a></div>{% endif %}
+  {% block topo %}
+  <header class="cab"><div><span class="trilha">{% block trilha %}TST-GESTÃO{% endblock %}</span><h1>{% block cabecalho %}{% endblock %}</h1>{% block subtitulo %}{% endblock %}</div>
+    <div class="acoes">{% block acoes %}{% endblock %}
+      {% if usuario and ativa != 'ajuda' %}<div class="ajuda-bts"><button type="button" class="btn" id="btn-tour" title="Passo a passo explicando esta tela"><svg class="ic"><use href="#i-info"/></svg>Tour desta tela</button>
+      <a class="btn" href="{{ url_for('auth.ajuda') }}" title="Guia completo, rotinas sugeridas e glossário">Ajuda</a></div>{% endif %}</div></header>
+  {% endblock %}
   {% block conteudo %}{% endblock %}
 </main>
-<div id="toast"></div>
-<script>window.NIVEL = {{ nivel }};</script>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script>window.NIVEL = {{ nivel }}; window.PAGINA = "{{ ativa or '' }}";</script>
 <script src="{{ url_for('static', filename='common.js') }}"></script>
-<script>
-document.getElementById('btn-recolher').onclick = () => {
-  const r = document.documentElement.classList.toggle('menu-recolhido');
-  try { localStorage.setItem('tst-menu', r ? 'recolhido' : 'aberto'); } catch (e) {}
-  setTimeout(() => window.dispatchEvent(new Event('resize')), 260);  // gráficos se reajustam à nova largura
-};
-</script>
+{% if usuario %}<script src="{{ url_for('static', filename='guia.js') }}"></script>
+<script src="{{ url_for('static', filename='tour.js') }}"></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

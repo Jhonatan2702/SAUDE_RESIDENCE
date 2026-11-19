@@ -1,0 +1,76 @@
+{# Componentes reutilizados pelos painéis #}
+
+{# título de card: nome, ⓘ com a regra de cálculo, nota à direita e uma frase explicando o card #}
+{% macro cab(titulo, calculo='', nota='', nota_id='', desc='') -%}
+<div class="card-cab"><h2>{{ titulo }}{% if calculo %}<span class="info" tabindex="0" data-info="{{ calculo }}"><svg class="ic"><use href="#i-info"/></svg></span>{% endif %}</h2>
+  {%- if nota or nota_id %}<small{% if nota_id %} id="{{ nota_id }}"{% endif %}>{{ nota }}</small>{% endif %}</div>
+{%- if desc %}<p class="card-desc">{{ desc }}</p>{% endif %}
+{%- endmacro %}
+
+{# filtro de período com atalhos; dispara o evento "periodo" no document #}
+{% macro periodo(hoje, padrao='mes') -%}
+<div class="periodo" id="periodo" data-hoje="{{ hoje }}" data-padrao="{{ padrao }}" role="group" aria-label="Período">
+  <div class="seg">
+    <button type="button" data-p="mes">Este mês</button><button type="button" data-p="mes-ant">Mês anterior</button>
+    <button type="button" data-p="90d">90 dias</button><button type="button" data-p="ano">Ano</button>
+  </div>
+  <div class="datas"><svg class="ic"><use href="#i-calendario"/></svg>
+    <input type="date" id="dt-ini" aria-label="Data inicial"><span>até</span><input type="date" id="dt-fim" aria-label="Data final"></div>
+</div>
+{%- endmacro %}
+
+{# janela de detalhamento: lista de pacientes/visitas por trás de cada número #}
+{% macro detalhe() -%}
+<dialog id="dlg-det" class="largo">
+  <h3 id="det-t"></h3>
+  <div class="barra-tab" style="padding:0 0 12px;border:0">
+    <input type="search" id="det-busca" class="busca" placeholder="Filtrar nesta lista…">
+    <span id="det-n" class="contador"></span>
+  </div>
+  <div class="tabela-wrap" style="max-height:58vh"><table><thead id="det-h"></thead><tbody id="det-b"></tbody></table></div>
+  <div class="dlg-acoes" style="justify-content:space-between">
+    <span><button type="button" class="btn" id="det-voltar" hidden>← Voltar</button> <button type="button" class="btn" id="det-csv">Exportar CSV</button></span>
+    <button type="button" class="btn primario" id="det-fechar">Fechar</button>
+  </div>
+</dialog>
+{%- endmacro %}
+
+{# ficha do bairro: abre ao clicar num bairro do mapa, dos rankings ou das tabelas de abrangência #}
+{% macro ficha() -%}
+<dialog id="dlg-ficha" class="largo ficha" aria-labelledby="fb-t">
+  <div class="fb-cab">
+    <div><span class="trilha" id="fb-trilha">Bairro</span><h3 id="fb-t"></h3><div id="fb-zonas" class="fb-zonas"></div></div>
+    <button type="button" class="btn" id="fb-fechar">Fechar</button>
+  </div>
+  <div id="fb-principal">
+    <div class="fb-kpis" id="fb-kpis"></div>
+    <div class="abas fb-abas" id="fb-abas">
+      <button type="button" data-fa="profissionais">Profissionais</button><button type="button" data-fa="pacientes">Pacientes</button>
+      <button type="button" data-fa="terapias">Terapias</button><button type="button" data-fa="relatorios">Relatórios pendentes</button>
+      <button type="button" data-fa="operadoras">Operadoras</button>
+    </div>
+    <section data-fp="profissionais">
+      <p class="card-desc">Quem atendeu neste bairro no período. Clique num profissional para ver todos os pacientes dele.</p>
+      <div class="barra-tab"><input type="search" id="fb-prof-busca" class="busca" placeholder="Buscar profissional…"><span class="contador" id="fb-prof-n"></span></div>
+      <div class="tabela-wrap" style="max-height:46vh"><table id="fb-t-prof"></table></div></section>
+    <section data-fp="pacientes" hidden>
+      <p class="card-desc">Pacientes ativos do bairro, as terapias dos últimos 90 dias, as pendências e quem os atendeu. Clique para ver o histórico de visitas.</p>
+      <div class="barra-tab"><input type="search" id="fb-pac-busca" class="busca" placeholder="Buscar paciente, terapia, profissional…">
+        <select id="fb-pac-filtro" style="width:auto"><option value="todos">Todos os pacientes ativos</option><option value="terapia">Só em terapia</option><option value="pendente">Só com pendência</option></select>
+        <span class="contador" id="fb-pac-n"></span></div>
+      <div class="tabela-wrap" style="max-height:46vh"><table id="fb-t-pac"></table></div></section>
+    <section data-fp="terapias" hidden>
+      <p class="card-desc">Situação de cada terapia no bairro. Clique numa terapia para ver os pacientes.</p>
+      <div class="tabela-wrap livre"><table id="fb-ter"></table></div></section>
+    <section data-fp="relatorios" hidden>
+      <div class="barra-tab"><input type="search" id="fb-rel-busca" class="busca" placeholder="Buscar paciente, profissional…"><span class="contador" id="fb-rel-n"></span></div>
+      <div class="tabela-wrap" style="max-height:46vh"><table id="fb-t-rel"></table></div></section>
+    <section data-fp="operadoras" hidden><p class="card-desc">Convênio dos pacientes ativos do bairro.</p><div class="lbar" id="fb-l-oper"></div></section>
+  </div>
+  <div id="fb-sub" hidden>
+    <div class="barra-tab"><button type="button" class="btn sm" id="fb-voltar">← Voltar</button>
+      <input type="search" id="fb-sub-busca" class="busca" placeholder="Filtrar nesta lista…"><span class="contador" id="fb-sub-n"></span></div>
+    <div class="tabela-wrap" style="max-height:56vh"><table id="fb-t-sub"></table></div>
+  </div>
+</dialog>
+{%- endmacro %}

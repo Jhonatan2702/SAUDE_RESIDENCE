@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block titulo %}Integração com a URL{% endblock %}
+{% block trilha %}Administração{% endblock %}
+{% block cabecalho %}Integração com a URL Saúde Residence{% endblock %}
+{% block subtitulo %}<p>Única fonte de dados do sistema. O banco local apenas espelha a URL, atualizado a cada {{ intervalo }} minutos.</p>{% endblock %}
+{% block acoes %}<button id="sync" class="btn primario" type="button"><svg class="ic"><use href="#i-integracoes"/></svg>Sincronizar agora</button>{% endblock %}
+{% block conteudo %}
+{% if not url %}
+<div class="alert"><svg class="ic"><use href="#i-aviso"/></svg><span><b>A URL da Saúde Residence ainda não foi configurada neste computador.</b> Informe o endereço no card “Endereço da URL” abaixo para os painéis receberem dados.</span></div>
+{% elif url.startswith('http://') %}
+<div class="alert warn"><svg class="ic"><use href="#i-aviso"/></svg><span>A URL usa HTTP sem criptografia: dados pessoais e de saúde trafegam sem proteção. Solicite HTTPS à equipe de dados e mantenha o acesso restrito à rede autorizada.</span></div>
+{% endif %}
+<div class="kpis" id="k-sync"></div>
+
+<div class="grade g2">
+  <div class="card" id="atualizacoes"><div class="card-cab"><h2>Atualizações do sistema</h2><small>versão instalada <b>{{ versao }}</b></small></div>
+    <p class="card-desc">Versões novas são publicadas com <b>assinatura digital</b>: o sistema só aceita arquivos assinados por quem desenvolve o TST-GESTÃO. Nada é instalado sem você confirmar. Os dados (pasta <code>dados</code>) são preservados.</p>
+    <div id="atu-estado" class="muted">Consultando…</div>
+    <div id="atu-nova" hidden></div>
+    <div class="row" style="margin-top:12px"><button type="button" class="btn" id="atu-verificar">Buscar atualizações</button></div>
+  </div>
+  <div class="card"><div class="card-cab"><h2>Endereço da URL</h2><small>guardado só neste computador</small></div>
+    <p class="card-desc">Endereço fornecido pela equipe de dados da Saúde Residence. Ele fica na pasta <code>dados</code> deste computador e não vai dentro do programa nem nas atualizações.</p>
+    {% if url_por_ambiente %}<p class="card-desc">Definido pela variável de ambiente <code>TST_DADOSBI_URL</code>: para trocar aqui, remova a variável.</p>{% endif %}
+    <form id="f-url" class="inline-form"><input id="url-dados" type="url" value="{{ url }}" placeholder="http://…/dadosbi/lista/dadospaciente" required{% if url_por_ambiente %} disabled{% endif %}>
+      <button class="btn primario" type="submit"{% if url_por_ambiente %} disabled{% endif %}>Salvar e sincronizar</button></form>
+  </div>
+</div>
+
+<div class="grade g2">
+  <div class="card"><div class="card-cab"><h2>Como funciona</h2></div>
+    <ul class="card-desc" style="padding-left:18px;margin:0">
+      <li>Na inicialização e a cada {{ intervalo }} minutos, o sistema baixa a URL e grava atendimentos, visitas e relatórios pendentes no banco local.</li>
+      <li>Registros que deixam de vir na resposta não são apagados, para que uma resposta parcial da URL não esvazie os painéis.</li>
+      <li>Os painéis leem somente esse espelho; não existe cadastro manual de pacientes.</li>
+    </ul></div>
+  <div class="card flush"><div class="card-cab"><h2>Monitor de alterações da URL</h2><small id="mon-resumo">Verificando…</small></div>
+    <p class="card-desc">A cada sincronização compara campos, tipos e categorias (status, serviço, operadora, terapias) com as respostas anteriores. Não guarda dados de pacientes.</p>
+    <div class="tabela-wrap" style="max-height:300px"><table id="t-alertas"></table></div></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='integracao.js') }}"></script>{% endblock %}

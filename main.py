@@ -6,6 +6,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import traceback
 import webbrowser
 import logging
@@ -53,12 +54,19 @@ def configurar_log_servidor(app) -> None:
     arquivo = DATA_DIR / "erro.log"
     handler = logging.FileHandler(arquivo, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    handler.setLevel(logging.WARNING)  # só avisos e erros; os acessos às páginas não vão para o log
     app.logger.addHandler(handler)
     app.logger.setLevel(logging.ERROR)
     logging.getLogger("werkzeug").addHandler(handler)
 
 
 def main() -> None:
+    apos_atualizacao = "--apos-atualizacao" in sys.argv
+    if apos_atualizacao:  # a versão anterior ainda está fechando: espera a porta liberar
+        for _ in range(60):
+            if not porta_em_uso():
+                break
+            time.sleep(0.5)
     if porta_em_uso():
         abrir_janela()
         return
@@ -69,9 +77,13 @@ def main() -> None:
 
     app = create_app()
     configurar_log_servidor(app)
-    from tst_gestao.integracoes import iniciar_sincronizacao_dadosbi
+    from tst_gestao.espelho import iniciar_agendamento
 
-    iniciar_sincronizacao_dadosbi(app.logger)
+    iniciar_agendamento(app.logger)  # espelha a URL agora e a cada hora
+    from tst_gestao import atualizador
+
+    atualizador.limpar_downloads()
+    atualizador.iniciar_verificacao(app.logger)  # só consulta; instalar depende do admin
     servidor = make_server(BIND_HOST, PORT, app, threaded=True)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()
 
@@ -82,16 +94,22 @@ def main() -> None:
         servidor.shutdown()
         icone.stop()
 
+    def atualizacoes(*_) -> None:
+        webbrowser.open(f"{URL}integracao#atualizacoes")
+
     icone = pystray.Icon(
         "TST-GESTAO",
         Image.open(LOGO),
         "TST-GESTÃO",
         menu=pystray.Menu(
             pystray.MenuItem("Abrir TST-GESTÃO", lambda *_: abrir_janela(), default=True),
+            pystray.MenuItem("Buscar atualizações", atualizacoes),
             pystray.MenuItem("Sair", sair),
         ),
     )
-    threading.Timer(0.8, abrir_janela).start()
+    atualizador.ao_reiniciar = lambda: sair(icone)
+    if not apos_atualizacao:  # depois de atualizar, a janela que já estava aberta recarrega sozinha
+        threading.Timer(0.8, abrir_janela).start()
     icone.run()
 
 

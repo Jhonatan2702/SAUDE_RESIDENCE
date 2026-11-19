@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block titulo %}Ajuda e primeiros passos{% endblock %}
+{% block trilha %}Ajuda{% endblock %}
+{% block cabecalho %}Ajuda e primeiros passos{% endblock %}
+{% block subtitulo %}<p>Tudo o que você precisa para usar os painéis no dia a dia.</p>{% endblock %}
+{% block conteudo %}
+{% set inicio = url_for('paineis.painel') if nivel >= 2 else url_for('paineis.operacional') %}
+{# o que cada tela responde: perguntas que ela ajuda a resolver #}
+{% set PERGUNTAS = {
+  'geral': ['Quantos pacientes estão ativos agora?', 'Quantos orçamentos venceram ou vão vencer?', 'A carteira está crescendo ou diminuindo?'],
+  'mapa': ['Em que bairros estão os pacientes e as pendências?', 'Onde há mais relatórios atrasados?', 'Quais bairros formam cada zona de atendimento?'],
+  'terapias': ['Quantos pacientes há em Fisio, Fono, TO, Nutri e Psico?', 'Quem está sem visita há mais de ' ~ atraso ~ ' dias numa terapia?', 'Quantos pacientes de monitoramento têm terapias?'],
+  'complexidade': ['Quantos pacientes são básicos, intermediários ou intensivos?', 'Quais terapias os pacientes intensivos fazem?'],
+  'movimentacao': ['Qual a mortalidade do período e do ano?', 'Quem foi a óbito?', 'Por que os pacientes estão recebendo alta?'],
+  'perfil': ['Qual operadora e qual serviço concentram mais pacientes?', 'Qual a faixa etária e os diagnósticos mais comuns?'],
+  'profissionais': ['Quem fez mais visitas no período?', 'Quem atende em cada bairro?'],
+  'relatorios': ['Quais relatórios estão pendentes e desde quando?', 'Qual profissional precisa entregar mais relatórios?'],
+  'profissional': ['Quais pacientes um profissional atendeu no período?', 'Quando foi a primeira e a última visita de cada um?'],
+  'abrangencia': ['Qual a região de cada profissional?', 'Que bairros e zonas estão sem ninguém atendendo?', 'Quem está mais perto de um paciente novo?'],
+  'fichas': ['O que foi registrado no App no período?', 'Quantas fichas cada profissional fez?'],
+  'precos': ['Quanto custa cada terapia por empresa? (aguardando o sistema do cliente)'],
+} %}
+<div class="guia">
+  <div class="indice">
+    <a class="btn sm" href="#comece">Comece aqui</a><a class="btn sm" href="#dados">De onde vêm os dados</a>
+    <a class="btn sm" href="#rotina">Rotina sugerida</a><a class="btn sm" href="#telas">O que cada tela responde</a>
+    <a class="btn sm" href="#glossario">Glossário</a><a class="btn sm" href="#faq">Perguntas frequentes</a>
+  </div>
+
+  <h2 id="comece">Comece aqui</h2>
+  <div class="card">
+    <ol class="passo-a-passo">
+      <li><div><h3>Faça o tour de boas-vindas</h3><p>Um passo a passo de 1 minuto que mostra o menu, o filtro de período, as abas e como chegar nas listas de pacientes.
+        <a class="btn primario sm" href="{{ inicio }}?tour=boas-vindas">Fazer o tour agora</a></p></div></li>
+      <li><div><h3>Escolha o período</h3><p>No topo de cada painel: <b>Este mês</b>, <b>Mês anterior</b>, <b>90 dias</b>, <b>Ano</b> ou datas livres. A escolha vale para a página inteira e fica guardada.</p></div></li>
+      <li><div><h3>Leia os cards de cima para baixo</h3><p>Os números principais ficam no topo de cada aba. A cor da borda indica o tipo: <span class="tag acc">azul</span> informa, <span class="tag ok">verde</span> é entrada, <span class="tag warn">laranja</span> pede atenção e <span class="tag crit">vermelho</span> é crítico.</p></div></li>
+      <li><div><h3>Clique para ver quem são</h3><p>Todo número com “Ver pacientes →”, toda barra, linha de tabela e bairro do mapa abre a lista de pessoas. Na lista dá para buscar, exportar para o Excel (CSV) e clicar num paciente para ver o histórico de visitas.</p></div></li>
+      <li><div><h3>Na dúvida, use o ⓘ e o tour</h3><p>O <b>ⓘ</b> ao lado de cada título explica a regra do cálculo. O botão <b>Tour desta tela</b>, no topo, explica a aba aberta.</p></div></li>
+    </ol>
+  </div>
+
+  <h2 id="dados">De onde vêm os dados</h2>
+  <div class="card">
+    <p>Todos os números vêm do <b>sistema da Saúde Residence</b>, por um endereço (URL) liberado pela equipe de dados do cliente. O TST-GESTÃO busca as informações <b>sozinho, a cada hora</b>, e guarda uma cópia para os painéis.</p>
+    <p><b>Nada é digitado aqui.</b> Para corrigir um dado (bairro, operadora, data de alta), corrija no sistema da Saúde Residence: a correção aparece aqui na próxima atualização.</p>
+    <p>O quadro <b>“Dados atualizados”</b>, no menu lateral, mostra quando chegou a última atualização. Se estiver vermelho ou muito antigo, avise o administrador.</p>
+    <p>O sistema do cliente libera informações aos poucos. Hoje ainda não chegam: valores e preços por empresa, tipo de ficha preenchida, telefone, data de nascimento e um código único do paciente.</p>
+  </div>
+
+  <h2 id="rotina">Rotina sugerida</h2>
+  <div class="rotina">
+    <div class="card" style="--tom:var(--crit)"><h3>Todo dia</h3><ul>
+      <li><b>Relatórios pendentes:</b> cobrar primeiro as competências mais antigas.</li>
+      <li><b>Fichas realizadas:</b> conferir o que foi registrado no dia anterior.</li>
+      <li><b>Região de abrangência:</b> olhar bairros e zonas sem cobertura.</li>
+    </ul></div>
+    <div class="card" style="--tom:var(--warn)"><h3>Toda semana</h3><ul>
+      {% if nivel >= 2 %}<li><b>Visão geral:</b> orçamentos vencidos e que vencem em até 7 dias.</li>
+      <li><b>Terapias:</b> pacientes com terapia pendente e indicados sem nenhuma terapia.</li>
+      <li><b>Visão geral:</b> ativos sem visita no período.</li>{% endif %}
+      <li><b>Profissional × atendimento:</b> carga de cada profissional.</li>
+      <li><b>Abrangência:</b> bairros que dependem de um único profissional.</li>
+    </ul></div>
+    <div class="card" style="--tom:var(--acc)"><h3>Todo mês</h3><ul>
+      {% if nivel >= 2 %}<li><b>Movimentação:</b> mortalidade, óbitos e motivos de alta do mês.</li>
+      <li><b>Complexidade:</b> como mudou a distribuição Básico / Intermediário / Intensivo.</li>
+      <li><b>Perfil:</b> operadoras e serviços, para as negociações.</li>
+      <li><b>Mapa:</b> onde a carteira cresceu.</li>{% else %}<li><b>Fichas:</b> total do mês por profissional e por terapia (use “Mês anterior”).</li>{% endif %}
+    </ul></div>
+  </div>
+
+  <h2 id="telas">O que cada tela responde</h2>
+  {% if nivel >= 2 %}
+  <p class="card-desc">Painel BI: visão de gestão.</p>
+  {% for chave, nome in abas_painel %}
+  <div class="card tela-guia"><div><h3>{{ nome }}</h3><ul class="perguntas">{% for p in PERGUNTAS.get(chave, []) %}<li>{{ p }}</li>{% endfor %}</ul></div>
+    <div class="btns"><a class="btn sm" href="{{ url_for('paineis.painel') }}#{{ chave }}">Abrir</a>
+      <a class="btn primario sm" href="{{ url_for('paineis.painel') }}?tour=painel:{{ chave }}#{{ chave }}">Fazer o tour</a></div></div>
+  {% endfor %}
+  {% endif %}
+  <p class="card-desc">Painel operacional: listas do dia a dia.</p>
+  {% for chave, nome, _ in abas_operacional %}
+  <div class="card tela-guia"><div><h3>{{ nome }}</h3><ul class="perguntas">{% for p in PERGUNTAS.get(chave, []) %}<li>{{ p }}</li>{% endfor %}</ul></div>
+    <div class="btns"><a class="btn sm" href="{{ url_for('paineis.operacional') }}#{{ chave }}">Abrir</a>
+      <a class="btn primario sm" href="{{ url_for('paineis.operacional') }}?tour=operacional:{{ chave }}#{{ chave }}">Fazer o tour</a></div></div>
+  {% endfor %}
+
+  <h2 id="glossario">Glossário</h2>
+  <div class="card"><dl class="glossario">
+    <dt>Atendimento</dt><dd>Um episódio de cuidado no sistema do cliente (uma admissão em um serviço). A mesma pessoa pode ter vários, por exemplo Monitoramento e Visita médica.</dd>
+    <dt>Paciente</dt><dd>A pessoa. Os painéis contam pessoas distintas, reconhecidas pelo nome, porque o sistema do cliente ainda não envia um código único.</dd>
+    <dt>Paciente ativo</dt><dd>Tem ao menos um atendimento admitido até a data final do período e sem alta até essa data.</dd>
+    <dt>Paciente em terapia</dt><dd>Paciente ativo com ao menos uma visita de Fisio, Fono, TO, Nutri ou Psico nos últimos {{ janela }} dias.</dd>
+    <dt>Terapia pendente</dt><dd>Paciente indicado com terapias que fez a terapia nos últimos {{ janela }} dias, mas está há mais de {{ atraso }} dias sem visita dela. Também conta quem é indicado com terapias e não teve nenhuma visita de terapia em {{ janela }} dias.</dd>
+    <dt>Monitoramento com terapias</dt><dd>Paciente ativo no serviço Monitoramento que o sistema do cliente marca com terapias.</dd>
+    <dt>Complexidade</dt><dd>Quantidade de terapias diferentes nos últimos {{ janela }} dias: Básico (1 ou 2), Intermediário (3) e Intensivo (4 ou mais).</dd>
+    <dt>Mortalidade</dt><dd>Pacientes que foram a óbito no período ÷ pacientes atendidos no período × 100.</dd>
+    <dt>Alta</dt><dd>Saída do atendimento por qualquer motivo, exceto óbito, que é contado à parte.</dd>
+    <dt>Orçamento</dt><dd>Período autorizado de cada atendimento (normalmente mensal). Vencido = a data de fim já passou e o atendimento continua ativo.</dd>
+    <dt>Zona de atendimento</dt><dd>Região definida no sistema do cliente (ex.: ALDEOTA 7) que agrupa vários bairros. Um bairro pode estar em mais de uma zona.</dd>
+    <dt>Cobertura</dt><dd>Bairro ou zona com pelo menos um profissional que fez visita lá no período. Sem cobertura = há pacientes indicados com terapia e nenhum profissional no período.</dd>
+    <dt>Ficha realizada no App</dt><dd>Cada visita registrada pelo profissional no aplicativo.</dd>
+    <dt>Competência</dt><dd>Mês de referência de um relatório pendente.</dd>
+  </dl></div>
+
+  <h2 id="faq">Perguntas frequentes</h2>
+  <div class="card">
+    <details class="faq"><summary>Por que o mês atual aparece mais baixo nos gráficos?</summary><p>Porque o mês ainda não terminou. Compare meses completos (botão “Mês anterior”) ou use “90 dias”.</p></details>
+    <details class="faq"><summary>Encontrei um dado errado (bairro, operadora, data). Como corrijo?</summary><p>Corrija no sistema da Saúde Residence. O TST-GESTÃO só espelha esse sistema e mostra a correção na próxima atualização (até 1 hora).</p></details>
+    <details class="faq"><summary>Por que um paciente aparece com dois ou mais atendimentos?</summary><p>Cada serviço contratado é um atendimento separado no sistema do cliente. Nos painéis o paciente é contado uma vez só.</p></details>
+    <details class="faq"><summary>Dois pacientes com o mesmo nome aparecem juntos. Por quê?</summary><p>O sistema do cliente ainda não envia CPF nem código do paciente, então pessoas com o mesmo nome são tratadas como uma. Isso se resolve quando a equipe de dados enviar um identificador único.</p></details>
+    <details class="faq"><summary>Um bairro não aparece no mapa.</summary><p>O mapa mostra os 121 bairros oficiais de Fortaleza. Pacientes de outras cidades e bairros escritos de um jeito irreconhecível aparecem na nota abaixo do mapa.</p></details>
+    <details class="faq"><summary>Como levo uma lista para o Excel?</summary><p>Abra a lista (clicando num número ou numa tabela) e use <b>Exportar CSV</b>. O arquivo abre direto no Excel.</p></details>
+    <details class="faq"><summary>Os dados pararam de atualizar.</summary><p>A atualização roda enquanto o TST-GESTÃO está aberto no computador servidor. Verifique se ele está ligado e com o aplicativo aberto (ícone na bandeja do Windows) e avise o administrador.</p></details>
+    <details class="faq"><summary>Não vejo o Painel BI no menu.</summary><p>O seu perfil é Operacional. Se precisar, peça ao administrador para mudar o seu perfil para Gestor.</p></details>
+    <details class="faq"><summary>Como vejo tudo sobre um bairro?</summary><p>Clique no bairro no mapa (Painel BI → Mapa por bairro, ou Painel operacional → Região de abrangência). Abre a <b>ficha do bairro</b>: zonas, profissionais que atendem lá, pacientes com terapias e pendências, relatórios pendentes e operadoras. Dali dá para abrir os pacientes de cada profissional e o histórico de cada paciente. Também dá para mandar um link direto, como <code>/painel?bairro=Meireles#mapa</code>.</p></details>
+    <details class="faq"><summary>Quero rever os tours.</summary><p>Use o botão <b>Tour desta tela</b>, no topo de cada página, ou os botões “Fazer o tour” nesta página.</p></details>
+  </div>
+</div>
+{% endblock %}
