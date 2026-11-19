@@ -9,9 +9,9 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 
-from .fonte import NOMES_TERAPIA, Base, br, carregar, em_fortaleza, periodo, tem_terapias
+from .fonte import JANELA_COBERTURA, NOMES_TERAPIA, Base, br, carregar, em_fortaleza, periodo, tem_terapias
 
 COLS_RELATORIOS = ["Paciente", "Atendimento", "Profissional", "Terapia", "Especialidade", "Competência", "Operadora", "Relatório"]
 COLS_FICHAS = ["Data", "Paciente", "Atendimento", "Profissional", "Terapia", "Operadora", "Bairro"]
@@ -151,6 +151,17 @@ def abrangencia(ini: date | None, fim: date | None) -> dict:
     por_bairro: dict[str, set] = {}
     for g in linhas:
         por_bairro.setdefault(g["bairro"], set()).add(g["profissional"])
+    # quem cobre cada bairro: visitou alguém lá nos últimos JANELA_COBERTURA dias (mesmo sem visita no período)
+    cobre: dict[str, dict] = {}
+    cobre_zona: dict[str, set] = {}
+    inicio_cob = fim - timedelta(days=JANELA_COBERTURA - 1)
+    for v in base.visitas:
+        if inicio_cob <= v["_data"] <= fim and (a := base.por_id.get(v["atendimento_origem_id"])) and (k := chave_profissional(v)) and a["zona"]:
+            cobre_zona.setdefault(a["zona"], set()).add(k)
+        if inicio_cob <= v["_data"] <= fim and (a := base.por_id.get(v["atendimento_origem_id"])) and a["bairro"] and (k := chave_profissional(v)):
+            atual = cobre.setdefault(a["bairro"], {}).get(k)
+            if not atual or v["_data"] > atual[1]:
+                cobre[a["bairro"]][k] = (v["profissional"] or "Sem nome", v["_data"])
     # pacientes ativos indicados com terapias, por bairro de Fortaleza e por zona: base para achar áreas sem cobertura
     indicados: dict[str, set] = {}
     indicados_zona: dict[str, set] = {}
@@ -167,6 +178,7 @@ def abrangencia(ini: date | None, fim: date | None) -> dict:
         zonas.append({"id": zid, "nome": nome_zona(zid), "bairros": zinfo.get("bairros", []),
                       "indicados": len(indicados_zona.get(zid, ())),
                       "profissionais": len(por_zona.get(zid, {}).get("profissionais", ())),
+                      "cobrem": len(cobre_zona.get(zid, ())),
                       "visitas": por_zona.get(zid, {}).get("visitas", 0)})
     return {
         "periodo": {"ini": ini.isoformat(), "fim": fim.isoformat()}, "atualizado_em": base.sincronizado,
@@ -178,10 +190,25 @@ def abrangencia(ini: date | None, fim: date | None) -> dict:
                           key=lambda x: (-x["profissionais"], x["bairro"])),
         "profissionais": len({g["profissional"] for g in linhas}),
         "indicados_bairro": {b: len(p) for b, p in indicados.items()},
-        "sem_cobertura": sorted(({"bairro": b, "pacientes": len(p)} for b, p in indicados.items() if b not in por_bairro),
-                                key=lambda x: (-x["pacientes"], x["bairro"])),
+        # bairros sem visita no período: quem ainda cobre (visitou alguém lá nos últimos JANELA_COBERTURA dias)
+        "sem_cobertura": sorted(({"bairro": b, "pacientes": len(p), "cobrem": [{"nome": n, "ultima": br(d)} for n, d in
+                                  sorted(cobre.get(b, {}).values(), key=lambda x: x[1], reverse=True)]}
+                                 for b, p in indicados.items() if b not in por_bairro),
+                                key=lambda x: (bool(x["cobrem"]), -x["pacientes"], x["bairro"])),
+        "cobertura_bairro": {b: len(v) for b, v in cobre.items()},
+        "regiao_prof": _regiao_por_profissional(cobre),
+        "janela_cobertura": JANELA_COBERTURA,
         "zonas": zonas,
     }
+
+
+def _regiao_por_profissional(cobre: dict[str, dict]) -> dict[str, list[str]]:
+    """{nome do profissional: bairros que ele cobre nos últimos JANELA_COBERTURA dias} (para o mapa de cobertura)."""
+    saida: dict[str, set] = {}
+    for bairro, profs in cobre.items():
+        for nome, _ in profs.values():
+            saida.setdefault(nome, set()).add(bairro)
+    return {n: sorted(b) for n, b in saida.items()}
 
 
 # ---------------------------------------------------------------- fichas realizadas no App

@@ -4,7 +4,7 @@
 {% block trilha %}Operacional{% endblock %}
 {% block cabecalho %}Painel operacional{% endblock %}
 {% block subtitulo %}<p id="sub-periodo">Acompanhamento do dia a dia com os dados da URL Saúde Residence.</p>{% endblock %}
-{% block acoes %}{{ ui.periodo(hoje) }}{% endblock %}
+{% block acoes %}{{ ui.busca() }}{{ ui.periodo(hoje) }}{% endblock %}
 {% block conteudo %}
 <div class="barra-abas"><div class="abas" role="tablist">
   {% for chave, nome, icone in abas %}<button type="button" role="tab" data-aba="{{ chave }}"><svg class="ic"><use href="#i-{{ icone }}"/></svg>{{ nome }}<span class="cont" id="cont-{{ chave }}" hidden></span></button>{% endfor %}
@@ -49,8 +49,8 @@
     <div class="mapa-lado">
       <div class="card flush">{{ ui.cab('Cobertura por zona', 'Zonas de atendimento enviadas pela URL: pacientes ativos indicados com terapias na zona, profissionais diferentes com visita na zona no período e total de visitas. Zona sem profissional e com pacientes indicados = sem cobertura. Clique numa zona para destacá-la no mapa e filtrar a tabela.', nota_id='zonas-nota') }}
         <div class="tabela-wrap" style="max-height:300px"><table id="t-zonas"></table></div></div>
-      <div class="card">{{ ui.cab('Bairros sem cobertura', 'Bairros de Fortaleza com pacientes ativos indicados com terapias e nenhuma visita de profissional no período.', nota_id='abr-sem-nota') }}
-        <div class="lbar" id="l-abr-sem"></div></div>
+      <div class="card flush">{{ ui.cab('Bairros descobertos no período', 'Bairros de Fortaleza com pacientes ativos indicados com terapias e nenhuma visita no período. “Coberto por” mostra quem atendeu alguém no bairro nos últimos 180 dias e pode assumir; os sem ninguém aparecem primeiro. Clique para abrir a ficha do bairro.', nota_id='abr-sem-nota') }}
+        <div class="tabela-wrap" style="max-height:300px"><table id="t-abr-sem"></table></div></div>
       <div class="card">{{ ui.cab('Profissionais por bairro', 'Quantos profissionais diferentes atenderam em cada bairro no período. Clique para filtrar a tabela.') }}
         <div class="lbar" id="l-abr-bairros"></div></div>
     </div>

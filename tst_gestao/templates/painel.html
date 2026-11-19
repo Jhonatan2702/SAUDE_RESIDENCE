@@ -4,7 +4,7 @@
 {% block trilha %}Gestão{% endblock %}
 {% block cabecalho %}Painel BI{% endblock %}
 {% block subtitulo %}<p id="sub-periodo">Indicadores calculados com os dados da URL Saúde Residence.</p>{% endblock %}
-{% block acoes %}{{ ui.periodo(hoje) }}{% endblock %}
+{% block acoes %}{{ ui.busca() }}{{ ui.periodo(hoje) }}{% endblock %}
 {% block conteudo %}
 <div class="barra-abas"><div class="abas" role="tablist">
   {% for chave, nome in abas %}<button type="button" role="tab" data-aba="{{ chave }}">{{ nome }}</button>{% endfor %}
@@ -32,7 +32,8 @@
     <div class="seg" id="mapa-metrica">
       <button type="button" data-m="ativos">Pacientes ativos</button><button type="button" data-m="em_terapia">Em terapia</button>
       <button type="button" data-m="pendentes">Terapia pendente</button><button type="button" data-m="visitas">Visitas</button>
-      <button type="button" data-m="profissionais">Profissionais</button><button type="button" data-m="relatorios">Relatórios pendentes</button>
+      <button type="button" data-m="profissionais">Profissionais no período</button><button type="button" data-m="cobertura">Profissionais que cobrem</button>
+      <button type="button" data-m="altas">Altas</button><button type="button" data-m="relatorios">Relatórios pendentes</button>
     </div>
     <select id="mapa-terapia" aria-label="Terapia"><option value="*">Todas as terapias</option></select>
     <select id="mapa-zona" aria-label="Destacar zona"><option value="">Destacar uma zona de atendimento…</option></select>

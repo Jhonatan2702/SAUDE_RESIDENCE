@@ -8,9 +8,8 @@
   const det = Detalhe((tipo, valor) => {
     const P = periodo.valor();
     if (tipo === 'ficha') { FichaBairro.abrir(valor); return null; }
-    if (tipo === 'profissional') return api('/api/operacional/profissional?' + new URLSearchParams({chave: valor, ini: P.ini, fim: P.fim}))
-      .then(r => ({...r, drill: {tipo: 'hist', col: 0}}));
-    if (tipo === 'hist') return api('/api/historico?' + new URLSearchParams({paciente: valor}));
+    if (tipo === 'profissional') { Ficha.abrir('profissional', valor); return null; }  // resumo completo do profissional
+    if (tipo === 'hist') { Ficha.abrir('paciente', valor); return null; }  // resumo completo do paciente
     const R = local.rel, F = local.fic;
     const col = {rel_ter: 3, rel_prof: 2, rel_comp: 5, fic_ter: 4, fic_prof: 3}[tipo];
     if (tipo.startsWith('rel_') && R) {
@@ -28,7 +27,7 @@
         const g = {};
         F.linhas.forEach(l => { (g[l[3]] ||= {n: 0, pac: new Set(), ters: new Set()}); g[l[3]].n++; g[l[3]].pac.add(l[1]); g[l[3]].ters.add(l[4]); });
         return lista('Fichas por profissional', ['Profissional', 'Fichas', 'Pacientes', 'Terapias'],
-          Object.entries(g).sort((a, b) => b[1].n - a[1].n).map(([p, x]) => [p, x.n, x.pac.size, [...x.ters].join(' · ')]), null);
+          Object.entries(g).sort((a, b) => b[1].n - a[1].n).map(([p, x]) => [p, x.n, x.pac.size, [...x.ters].join(' · ')]), {tipo: 'profissional', col: 0});
       }
       if (tipo === 'fic_pacientes') {
         const g = {};
@@ -56,10 +55,12 @@
   // ------------------------------------------------------------ tabelas
   const tRel = Tabela('t-rel', {busca: 'rel-busca', contador: 'rel-n', filtro: filtroSelect('rel-ter', 3), aoClicar: l => det.abrir('hist', l[0])});
   const tProf = Tabela('t-prof', {busca: 'prof-busca', contador: 'prof-n', numericas: [2, 3, 4, 5], aoClicar: l => det.abrir('profissional', l[6])});
+  const tAbrSem = Tabela('t-abr-sem', {numericas: [1], aoClicar: l => FichaBairro.abrir(l[0]),
+    vazio: 'Todos os bairros com pacientes indicados tiveram visita no período.'});
   const tAbr = Tabela('t-abr', {busca: 'abr-busca', contador: 'abr-n', numericas: [5, 6], aoClicar: l => FichaBairro.abrir(l[3])});
   let zonaSel = null;
-  const tZonas = Tabela('t-zonas', {numericas: [1, 2, 3, 4], vazio: 'A URL ainda não enviou zonas.',
-    aoClicar: l => { zonaSel = zonaSel === l[5] ? null : l[5]; $('abr-busca').value = zonaSel ? l[0] : ''; desenharMapaAbr(false); }});
+  const tZonas = Tabela('t-zonas', {numericas: [1, 2, 3, 4, 5], vazio: 'A URL ainda não enviou zonas.',
+    aoClicar: l => { zonaSel = zonaSel === l[6] ? null : l[6]; $('abr-busca').value = zonaSel ? l[0] : ''; desenharMapaAbr(false); }});
   const tFic = Tabela('t-fic', {busca: 'fic-busca', contador: 'fic-n', filtro: filtroSelect('fic-ter', 4), aoClicar: l => det.abrir('hist', l[1])});
   $('rel-ter').onchange = () => tRel.redesenhar();
   $('fic-ter').onchange = () => tFic.redesenhar();
@@ -117,15 +118,23 @@
     const prof = $('abr-prof').value, dados = {};
     abr.linhas.filter(l => !prof || l[0] === prof).forEach(l => { dados[l[3]] = (dados[l[3]] || 0) + (prof ? l[5] : 1); });
     const zona = abr.zonas.find(z => z.id === zonaSel);
-    const alerta = prof ? new Set() : new Set(abr.sem_cobertura.map(b => MapaFortaleza.norm(b.bairro)));
-    $('abr-mapa-nota').textContent = prof ? `${fmt(Object.keys(dados).length)} bairro(s) atendido(s)` : `${fmt(abr.sem_cobertura.length)} bairro(s) sem cobertura`;
+    // sem profissional: vermelho; descoberto no período mas com alguém que cobre: laranja
+    const alerta = prof ? new Set() : new Set(abr.sem_cobertura.filter(b => !b.cobrem.length).map(b => MapaFortaleza.norm(b.bairro)));
+    const atencao = prof ? new Set() : new Set(abr.sem_cobertura.filter(b => b.cobrem.length).map(b => MapaFortaleza.norm(b.bairro)));
+    // profissional escolhido: contorna a região que ele cobre (últimos 180 dias), além de pintar onde atendeu no período
+    const regiao = prof ? new Set((abr.regiao_prof[prof] || []).map(MapaFortaleza.norm)) : null;
+    const semNinguem = abr.sem_cobertura.filter(b => !b.cobrem.length).length;
+    $('abr-mapa-nota').textContent = prof
+      ? `${fmt(Object.keys(dados).length)} bairro(s) no período · cobre ${fmt(regiao.size)} em ${abr.janela_cobertura} dias`
+      : `${fmt(abr.sem_cobertura.length)} descoberto(s) no período · ${fmt(semNinguem)} sem ninguém`;
     mapaAbr.selecionar(null);
-    mapaAbr.desenhar(dados, {alerta, destaque: new Set(zona ? zona.bairros : [])});
+    mapaAbr.desenhar(dados, {alerta, atencao, destaque: regiao || new Set(zona ? zona.bairros : []),
+      rotuloDestaque: regiao ? `região que cobre (${abr.janela_cobertura} dias)` : 'bairros da zona'});
     if (sincronizarBusca) $('abr-busca').value = prof;
     tAbr.redesenhar();
   }
   $('abr-prof').onchange = () => abr && desenharMapaAbr();
-  ['l-abr-sem', 'l-abr-bairros'].forEach(id => $(id).addEventListener('click', e => {
+  ['l-abr-bairros'].forEach(id => $(id).addEventListener('click', e => {
     const lb = e.target.closest('.lb');
     if (lb) FichaBairro.abrir(lb.title);
   }));
@@ -138,25 +147,27 @@
       {tom: 'acc', icone: 'bairro', rotulo: 'Bairros atendidos', valor: fmt(r.bairros.length), sub: 'com ao menos uma visita'},
       {tom: 'warn', icone: 'aviso', rotulo: 'Bairros com 1 profissional', valor: fmt(r.bairros.filter(b => b.profissionais === 1).length),
         sub: 'cobertura dependente de uma pessoa', info: 'Bairros onde só um profissional atendeu no período: se ele faltar, o bairro fica descoberto.'},
-      {tom: 'crit', icone: 'aviso', rotulo: 'Bairros sem cobertura', valor: fmt(r.sem_cobertura.length),
-        sub: `<b>${fmt(r.sem_cobertura.reduce((s, b) => s + b.pacientes, 0))}</b> paciente(s) indicados com terapia`,
-        info: 'Bairros de Fortaleza com pacientes ativos indicados com terapias e nenhum profissional com visita no período.'},
-      {tom: 'crit', icone: 'aviso', rotulo: 'Zonas sem cobertura', valor: fmt(r.zonas.filter(z => z.indicados && !z.profissionais).length),
-        sub: `de ${fmt(r.zonas.length)} zonas com pacientes ou visitas`, info: 'Zonas de atendimento com pacientes ativos indicados com terapias e nenhum profissional com visita no período.'},
+      {tom: 'crit', icone: 'aviso', rotulo: 'Bairros descobertos no período', valor: fmt(r.sem_cobertura.length),
+        sub: `<b>${fmt(r.sem_cobertura.filter(b => !b.cobrem.length).length)}</b> sem nenhum profissional em ${r.janela_cobertura} dias`,
+        info: `Bairros de Fortaleza com pacientes ativos indicados com terapias e nenhuma visita no período. Os demais têm profissional que cobre a região (atendeu lá nos últimos ${r.janela_cobertura} dias).`},
+      {tom: 'crit', icone: 'aviso', rotulo: 'Zonas descobertas no período', valor: fmt(r.zonas.filter(z => z.indicados && !z.profissionais).length),
+        sub: `<b>${fmt(r.zonas.filter(z => z.indicados && !z.cobrem).length)}</b> sem nenhum profissional em ${r.janela_cobertura} dias`,
+        info: `Zonas com pacientes ativos indicados com terapias e nenhuma visita no período. As demais têm profissional que atendeu na zona nos últimos ${r.janela_cobertura} dias.`},
     ]);
     zonaSel = null;
     $('zonas-nota').textContent = `${fmt(r.zonas.length)} zonas`;
     // 6ª coluna (oculta) guarda o id da zona para o clique; zonas sem cobertura primeiro
-    tZonas.dados(['Zona', 'Bairros', 'Indicados', 'Profissionais', 'Visitas'],
+    tZonas.dados(['Zona', 'Bairros', 'Indicados', 'Profissionais', `Cobrem (${r.janela_cobertura} d)`, 'Visitas'],
       [...r.zonas].sort((a, b) => (!!a.profissionais - !!b.profissionais) || b.indicados - a.indicados)
-        .map(z => Object.assign([z.nome, z.bairros.length, z.indicados, z.profissionais, z.visitas], {5: z.id})));
+        .map(z => Object.assign([z.nome, z.bairros.length, z.indicados, z.profissionais, z.cobrem, z.visitas], {6: z.id})));
     const atual = $('abr-prof').value;
     const nomes = [...new Set(r.linhas.map(l => l[0]))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
     $('abr-prof').innerHTML = '<option value="">Todos os profissionais (cobertura)</option>' + nomes.map(n => `<option>${esc(n)}</option>`).join('');
     $('abr-prof').value = nomes.includes(atual) ? atual : '';
     $('abr-sem-nota').textContent = `${fmt(r.sem_cobertura.length)} bairro(s)`;
-    listaBarras('l-abr-sem', r.sem_cobertura.map(b => ({rotulo: b.bairro, valor: b.pacientes})), {max: 12, cor: 'var(--crit)',
-      vazio: 'Todos os bairros com pacientes indicados tiveram atendimento no período.'});
+    tAbrSem.dados(['Bairro', 'Pacientes', 'Coberto por'], r.sem_cobertura.map(b => [b.bairro, b.pacientes,
+      b.cobrem.length ? b.cobrem.slice(0, 3).map(x => `${x.nome} (${x.ultima})`).join('; ') + (b.cobrem.length > 3 ? ` +${b.cobrem.length - 3}` : '')
+        : `Ninguém nos últimos ${r.janela_cobertura} dias`]));
     listaBarras('l-abr-bairros', r.bairros.map(b => ({rotulo: b.bairro, valor: b.profissionais})), {max: 15});
     tAbr.dados(r.colunas, r.linhas);
     desenharMapaAbr();

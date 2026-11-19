@@ -1,114 +1,132 @@
-/* Ficha do bairro: abre ao clicar num bairro (mapa, rankings, tabelas de abrangência).
-   Mostra resumo, profissionais, pacientes, terapias, relatórios e operadoras do bairro, e permite descer
-   bairro → profissional → paciente → histórico de visitas, com "Voltar". */
-const FichaBairro = (() => {
-  let periodo = () => ({ini: '', fim: ''}), dados = null, pilha = [], pronto = false;
-  let tProf, tPac, tRel, tSub, abaAtual = 'profissionais';
-  const qs = extra => new URLSearchParams({...periodo(), ...extra});
+/* Fichas de resumo (bairro, profissional, paciente): uma janela que mostra tudo o que está ligado a quem foi clicado.
+   O servidor devolve sempre o mesmo formato (fichas.py); aqui só desenhamos. Dá para navegar entre fichas
+   (bairro → profissional → paciente → …) e voltar. Também cuida da busca rápida no topo dos painéis. */
+const Ficha = (() => {
+  let periodo = () => ({ini: '', fim: ''}), pilha = [], atual = null, abaAtual = null, tabelas = {};
+  const ROTULO = {bairro: 'bairro', profissional: 'profissional', paciente: 'paciente'};
 
-  function preparar() {
-    if (pronto) return;
-    pronto = true;
-    tProf = Tabela('fb-t-prof', {busca: 'fb-prof-busca', contador: 'fb-prof-n', numericas: [2, 3],
-      aoClicar: l => profissional(l[5], l[0]), vazio: 'Nenhum profissional com visita neste bairro no período.'});
-    tPac = Tabela('fb-t-pac', {busca: 'fb-pac-busca', contador: 'fb-pac-n', aoClicar: l => historico(l[0]),
-      filtro: l => ({todos: true, terapia: l[3] !== '—', pendente: l[4] !== '—'})[$('fb-pac-filtro').value],
-      vazio: 'Nenhum paciente ativo neste bairro.'});
-    tRel = Tabela('fb-t-rel', {busca: 'fb-rel-busca', contador: 'fb-rel-n', aoClicar: l => historico(l[0]),
-      vazio: 'Nenhum relatório pendente neste bairro.'});
-    tSub = Tabela('fb-t-sub', {busca: 'fb-sub-busca', contador: 'fb-sub-n', aoClicar: l => tSub.aoClicar?.(l)});
-    $('fb-pac-filtro').onchange = () => tPac.redesenhar();
-    $('fb-abas').onclick = e => { const b = e.target.closest('[data-fa]'); if (b) aba(b.dataset.fa); };
-    $('fb-kpis').onclick = e => {
-      const k = e.target.closest('[data-fk]');
-      if (!k) return;
-      const [destino, filtro] = k.dataset.fk.split('|');
-      if (filtro) { $('fb-pac-filtro').value = filtro; tPac.redesenhar(); }
-      aba(destino);
-    };
-    $('fb-ter').onclick = e => {
-      const tr = e.target.closest('[data-sig]');
-      if (!tr) return;
-      $('fb-pac-filtro').value = 'todos'; $('fb-pac-busca').value = tr.dataset.sig; tPac.redesenhar(); aba('pacientes');
-    };
-    $('fb-fechar').onclick = () => $('dlg-ficha').close();
-    $('fb-voltar').onclick = voltar;
-  }
-
-  function aba(nome) {
-    abaAtual = nome;
-    document.querySelectorAll('#fb-abas [data-fa]').forEach(b => b.classList.toggle('on', b.dataset.fa === nome));
-    document.querySelectorAll('#fb-principal [data-fp]').forEach(s => { s.hidden = s.dataset.fp !== nome; });
-  }
-
-  function mostrarPrincipal() {
-    $('fb-principal').hidden = false; $('fb-sub').hidden = true;
-    $('fb-trilha').textContent = 'Bairro';
-    $('fb-t').textContent = dados.bairro;
-  }
-
-  async function abrir(bairro) {
-    preparar();
+  async function abrir(tipo, valor, empilhar = true) {
+    if (!valor) return;
+    let r;
     try {
-      dados = await api('/api/bairro?' + qs({nome: bairro}));
+      r = await api(`/api/ficha/${tipo}?` + new URLSearchParams({valor, ...periodo()}));
     } catch (e) { return toast(e.message, true); }
-    pilha = [];
-    const r = dados.resumo, P = dados.periodo;
-    mostrarPrincipal();
-    $('fb-zonas').innerHTML = (dados.zonas.length ? '<span class="muted">Zonas:</span> ' + dados.zonas.map(z => `<span class="tag acc">${esc(z.nome)}</span>`).join(' ') : '') +
-      ` <span class="muted">· período ${esc(fmtData(P.ini))} a ${esc(fmtData(P.fim))}</span>` +
-      (dados.oficial ? '' : ' <span class="tag warn">fora dos bairros oficiais de Fortaleza</span>');
-    const k = (rot, val, fk, tom, sub = '') => `<button type="button" class="fb-k tom-${tom}" data-fk="${fk}"><span>${rot}</span><b>${fmt(val)}</b>${sub ? `<small>${sub}</small>` : ''}</button>`;
-    $('fb-kpis').innerHTML = k('Pacientes ativos', r.ativos, 'pacientes|todos', 'acc') +
-      k('Em terapia', r.em_terapia, 'pacientes|terapia', 'acc', 'últimos 90 dias') +
-      k('Com pendência', r.pendentes, 'pacientes|pendente', 'warn', r.sem_terapia ? `${fmt(r.sem_terapia)} sem nenhuma terapia` : '') +
-      k('Profissionais', r.profissionais, 'profissionais', 'acc', 'com visita no período') +
-      k('Visitas', r.visitas, 'profissionais', 'neutro', 'no período') +
-      k('Relatórios pendentes', r.relatorios, 'relatorios', 'warn');
-    $('fb-pac-filtro').value = 'todos';
-    ['fb-prof-busca', 'fb-pac-busca', 'fb-rel-busca'].forEach(id => { $(id).value = ''; });
-    tProf.dados(dados.profissionais.colunas, dados.profissionais.linhas);
-    tPac.dados(dados.pacientes.colunas, dados.pacientes.linhas);
-    tRel.dados(dados.relatorios.colunas, dados.relatorios.linhas);
-    $('fb-ter').innerHTML = '<thead><tr><th>Terapia</th><th class="num">Pacientes</th><th class="num">Pendentes</th><th class="num">Visitas no período</th><th class="num">Profissionais</th></tr></thead><tbody>' +
-      (dados.terapias.map(t => `<tr class="clicavel" data-sig="${esc(t.sigla)}" title="Ver os pacientes de ${esc(t.nome)}"><td><span class="fb-sig" style="--c:${corTerapia(t.sigla)}"></span>${esc(t.nome)}</td>` +
-        `<td class="num">${fmt(t.pacientes)}</td><td class="num">${fmt(t.pendentes)}</td><td class="num">${fmt(t.visitas)}</td><td class="num">${fmt(t.profissionais)}</td></tr>`).join('') ||
-       '<tr><td colspan="5" class="muted">Nenhuma terapia neste bairro.</td></tr>') + '</tbody>';
-    listaBarras('fb-l-oper', dados.operadoras, {total: r.ativos, vazio: 'Nenhum paciente ativo.'});
-    // abre na aba que tem conteúdo
-    aba(r.profissionais ? 'profissionais' : r.ativos ? 'pacientes' : 'relatorios');
+    if (empilhar) pilha.push({tipo, valor});
+    atual = r;
+    desenhar();
     const dlg = $('dlg-ficha');
     if (!dlg.open) dlg.showModal();
   }
 
-  async function sub(titulo, trilha, carregar, aoClicar) {
-    try {
-      const r = await carregar();
-      pilha.push({titulo, trilha, carregar, aoClicar});
-      $('fb-principal').hidden = true; $('fb-sub').hidden = false;
-      $('fb-trilha').textContent = trilha; $('fb-t').textContent = titulo;
-      $('fb-sub-busca').value = '';
-      tSub.aoClicar = aoClicar;
-      tSub.dados(r.colunas, r.linhas);
-    } catch (e) { toast(e.message, true); }
+  function desenhar() {
+    const r = atual, P = r.periodo;
+    $('fx-trilha').textContent = pilha.length > 1
+      ? pilha.slice(0, -1).map(p => ROTULO[p.tipo]).join(' › ') + ' › ' + r.trilha : r.trilha;
+    $('fx-t').textContent = r.titulo;
+    $('fx-voltar').hidden = pilha.length < 2;
+    $('fx-chips').innerHTML = r.chips.map(c => `<span class="tag ${esc(c.tom || '')}">${esc(c.texto)}</span>`).join(' ') +
+      ` <span class="muted">· período ${esc(fmtData(P.ini))} a ${esc(fmtData(P.fim))}</span>`;
+    $('fx-kpis').innerHTML = r.kpis.map(k => `<button type="button" class="fb-k tom-${esc(k.tom || 'neutro')}" data-fa="${esc(k.aba || '')}">` +
+      `<span>${esc(k.rotulo)}</span><b>${typeof k.valor === 'number' ? fmt(k.valor) : esc(k.valor)}</b>${k.sub ? `<small>${esc(k.sub)}</small>` : ''}</button>`).join('');
+    $('fx-abas').innerHTML = r.abas.map(a => `<button type="button" data-fa="${esc(a.id)}">${esc(a.nome)}` +
+      (a.tipo === 'tabela' ? `<span class="cont">${fmt(a.linhas.length)}</span>` : '') + '</button>').join('');
+    // cada aba ganha seu próprio bloco; tabelas usam o componente comum (busca, ordenação, CSV)
+    tabelas = {};
+    $('fx-corpo').innerHTML = r.abas.map(a => `<section data-fp="${esc(a.id)}" hidden><p class="card-desc">${esc(a.desc || '')}</p>` + (
+      a.tipo === 'tabela'
+        ? `<div class="barra-tab"><input type="search" class="busca" id="fx-b-${esc(a.id)}" placeholder="Filtrar nesta lista…">` +
+          (a.filtros ? `<select id="fx-f-${esc(a.id)}" style="width:auto">${a.filtros.map((f, i) => `<option value="${i}">${esc(f.rotulo)}</option>`).join('')}</select>` : '') +
+          `<button type="button" class="btn sm" data-csv="fx-t-${esc(a.id)}">Exportar CSV</button><span class="contador" id="fx-n-${esc(a.id)}"></span></div>` +
+          `<div class="tabela-wrap" style="max-height:46vh"><table id="fx-t-${esc(a.id)}"></table></div>`
+        : a.tipo === 'barras' ? `<div class="lbar" id="fx-l-${esc(a.id)}"></div>`
+          : `<dl class="fx-dados">${a.pares.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`) + '</section>').join('');
+    r.abas.forEach(a => {
+      if (a.tipo === 'tabela') {
+        const filtroSel = a.filtros && $(`fx-f-${a.id}`);
+        tabelas[a.id] = Tabela(`fx-t-${a.id}`, {
+          busca: `fx-b-${a.id}`, contador: `fx-n-${a.id}`, numericas: a.numericas || [],
+          filtro: filtroSel ? l => { const f = a.filtros[+filtroSel.value]; return f.col === undefined || (l[f.col] && l[f.col] !== '—'); } : null,
+          aoClicar: a.abrir ? l => abrir(a.abrir.tipo, String(l[a.abrir.col])) : null,
+          vazio: 'Nada a mostrar.',
+        });
+        if (filtroSel) filtroSel.onchange = () => tabelas[a.id].redesenhar();
+        tabelas[a.id].dados(a.colunas, a.linhas);
+      } else if (a.tipo === 'barras') {
+        listaBarras(`fx-l-${a.id}`, a.itens, {max: a.ordem ? 24 : 30, total: a.ordem ? 0 : a.itens.reduce((s, i) => s + i.valor, 0)});
+        if (a.abrir) $(`fx-l-${a.id}`).onclick = e => { const lb = e.target.closest('.lb'); if (lb) abrir(a.abrir.tipo, lb.title); };
+      }
+    });
+    const primeira = r.abas.find(a => a.id === abaAtual && pilha.length && atual.tipo === pilha[pilha.length - 1].tipo)
+      || r.abas.find(a => a.tipo !== 'tabela' || a.linhas.length) || r.abas[0];
+    aba(primeira.id);
   }
-  const profissional = (chave, nome) => sub(nome, `Bairro ${dados.bairro} › Profissional`,
-    () => api('/api/operacional/profissional?' + qs({chave})), l => historico(l[0]));
-  const historico = nome => sub(nome, `Bairro ${dados.bairro} › Paciente › Histórico de visitas`,
-    () => api('/api/historico?' + new URLSearchParams({paciente: nome})), null);
 
-  function voltar() {
-    pilha.pop();
-    const ant = pilha.pop();
-    if (ant) sub(ant.titulo, ant.trilha, ant.carregar, ant.aoClicar);
-    else { mostrarPrincipal(); aba(abaAtual); }
+  function aba(id) {
+    if (!id) return;
+    abaAtual = id;
+    document.querySelectorAll('#fx-abas [data-fa]').forEach(b => b.classList.toggle('on', b.dataset.fa === id));
+    document.querySelectorAll('#fx-corpo [data-fp]').forEach(s => { s.hidden = s.dataset.fp !== id; });
   }
 
-  // link direto: /painel?bairro=Meireles#mapa abre a ficha do bairro ao carregar a página
-  addEventListener('load', () => {
-    const b = new URLSearchParams(location.search).get('bairro');
-    if (b) setTimeout(() => abrir(b), 600);
-  });
+  function iniciar() {
+    if (!$('dlg-ficha')) return;
+    $('fx-abas').onclick = e => { const b = e.target.closest('[data-fa]'); if (b) aba(b.dataset.fa); };
+    $('fx-kpis').onclick = e => { const b = e.target.closest('[data-fa]'); if (b) aba(b.dataset.fa); };
+    $('fx-fechar').onclick = () => $('dlg-ficha').close();
+    $('dlg-ficha').addEventListener('close', () => { pilha = []; });
+    $('fx-voltar').onclick = () => { pilha.pop(); const ant = pilha[pilha.length - 1]; if (ant) abrir(ant.tipo, ant.valor, false); };
+    iniciarBusca();
+    // links diretos: /painel?bairro=Meireles, ?paciente=Nome, ?profissional=Nome
+    addEventListener('load', () => {
+      const q = new URLSearchParams(location.search);
+      for (const tipo of ['bairro', 'profissional', 'paciente']) if (q.get(tipo)) return setTimeout(() => abrir(tipo, q.get(tipo)), 600);
+    });
+  }
 
+  // ---------------------------------------------------------------- busca rápida
+  function iniciarBusca() {
+    const campo = $('busca-global'), lista = $('busca-resultados');
+    if (!campo) return;
+    let espera, itens = [], marcado = -1;
+    const fechar = () => { lista.hidden = true; marcado = -1; };
+    const escolher = i => { const it = itens[i]; if (!it) return; fechar(); campo.value = ''; abrir(it.tipo, it.valor); };
+    const marcar = i => {
+      marcado = Math.max(0, Math.min(itens.length - 1, i));
+      lista.querySelectorAll('[data-i]').forEach(el => el.classList.toggle('on', +el.dataset.i === marcado));
+    };
+    campo.addEventListener('input', () => {
+      clearTimeout(espera);
+      const q = campo.value.trim();
+      if (q.length < 2) return fechar();
+      espera = setTimeout(async () => {
+        try {
+          const r = await api('/api/busca?' + new URLSearchParams({q}));
+          itens = [...r.pacientes.map(p => ({tipo: 'paciente', valor: p.nome, nome: p.nome, detalhe: p.detalhe})),
+            ...r.profissionais.map(p => ({tipo: 'profissional', valor: p.chave, nome: p.nome, detalhe: p.detalhe}))];
+          let i = -1;
+          const grupo = (titulo, tipo) => {
+            const g = itens.map((it, k) => [it, k]).filter(([it]) => it.tipo === tipo);
+            return g.length ? `<b>${titulo}</b>` + g.map(([it, k]) => `<button type="button" data-i="${k}"><span>${esc(it.nome)}</span><small>${esc(it.detalhe)}</small></button>`).join('') : '';
+          };
+          lista.innerHTML = (grupo('Pacientes', 'paciente') + grupo('Profissionais', 'profissional')) || '<p class="muted">Ninguém encontrado com esse nome.</p>';
+          lista.hidden = false; marcado = i;
+        } catch (e) { toast(e.message, true); }
+      }, 250);
+    });
+    campo.addEventListener('keydown', e => {
+      if (lista.hidden) return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); marcar(marcado + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); marcar(marcado - 1); }
+      else if (e.key === 'Enter') { e.preventDefault(); escolher(marcado < 0 ? 0 : marcado); }
+      else if (e.key === 'Escape') fechar();
+    });
+    lista.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) escolher(+b.dataset.i); });
+    document.addEventListener('click', e => { if (!e.target.closest('.busca-global')) fechar(); });
+  }
+
+  document.addEventListener('DOMContentLoaded', iniciar);
   return {configurar: fn => { periodo = fn; }, abrir};
 })();
+
+// compatibilidade: o mapa e as tabelas chamam FichaBairro.abrir(nome do bairro)
+const FichaBairro = {abrir: b => Ficha.abrir('bairro', b), configurar: fn => Ficha.configurar(fn)};

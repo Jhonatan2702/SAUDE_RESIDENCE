@@ -1,12 +1,13 @@
 """Inicialização do banco local (usuários + espelho da URL) e perfis de acesso."""
 from __future__ import annotations
 
+import os
 import shutil
 from datetime import datetime
 
 from werkzeug.security import generate_password_hash
 
-from .banco import DATA_DIR, DB_PATH, Conexao, ErroIntegridade, conectar, criar_estrutura, tabelas_existentes  # noqa: F401
+from .banco import DATA_DIR, DB_PATH, POSTGRES, Conexao, ErroIntegridade, conectar, criar_estrutura, tabelas_existentes  # noqa: F401
 
 # Perfis em ordem crescente de acesso. Cada perfil enxerga também tudo o que os anteriores enxergam.
 PERFIS = {
@@ -30,6 +31,8 @@ def connect() -> Conexao:
 
 
 def _remover_legadas() -> None:
+    if POSTGRES:  # as tabelas da 1ª fase só existiram no arquivo SQLite do executável
+        return
     with connect() as conn:
         presentes = [t for t in LEGADAS if t in tabelas_existentes(conn)]
         if not presentes:
@@ -55,5 +58,18 @@ def init_db() -> None:
         if not conn.execute("SELECT 1 FROM usuarios").fetchone():
             conn.execute(
                 "INSERT INTO usuarios (usuario, nome, senha_hash, nivel, trocar_senha) VALUES ('admin', 'Administrador', ?, 'admin', 1)",
-                (generate_password_hash("admin"),),
+                (generate_password_hash(_senha_inicial_admin()),),
             )
+
+
+def _senha_inicial_admin() -> str:
+    """Senha do primeiro admin: TST_ADMIN_SENHA ou, só no executável local, 'admin'.
+
+    Na hospedagem (PostgreSQL) o site é público: sem a variável, o sistema não sobe com admin/admin.
+    """
+    senha = os.environ.get("TST_ADMIN_SENHA", "")
+    if senha:
+        return senha
+    if POSTGRES:
+        raise RuntimeError("Defina a variável de ambiente TST_ADMIN_SENHA (senha inicial do usuário admin).")
+    return "admin"

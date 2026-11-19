@@ -8,7 +8,7 @@ from flask import abort, g, jsonify, redirect, request, session, url_for
 
 from .db import NIVEIS, connect
 
-LIVRES = {"auth.login", "static"}
+LIVRES = {"auth.login", "static", "saude"}
 TROCA_SENHA = {"auth.perfil", "auth.logout", "auth.api_senha"}
 
 

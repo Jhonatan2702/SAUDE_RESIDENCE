@@ -1,0 +1,6 @@
+# Dependências da hospedagem (Render). O executável continua usando requirements.txt.
+flask>=3.0,<4
+cryptography>=42
+psycopg[binary]>=3.2,<4
+psycopg-pool>=3.2,<4
+gunicorn>=22,<24

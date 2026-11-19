@@ -1,4 +1,6 @@
 """Banco local: estrutura do espelho e limpeza das tabelas da fase da planilha."""
+import pytest
+
 from tst_gestao import banco
 from tst_gestao.db import DATA_DIR, connect, init_db
 
@@ -10,6 +12,7 @@ def test_estrutura_tem_apenas_usuarios_e_espelho(app):
     assert not tabelas & {"pacientes", "terapias", "webhooks"}
 
 
+@pytest.mark.skipif(banco.POSTGRES, reason="as tabelas da 1ª fase só existiram no arquivo SQLite do executável")
 def test_tabelas_da_planilha_sao_removidas_com_backup(app):
     with connect() as conn:
         conn.execute("CREATE TABLE pacientes (id INTEGER PRIMARY KEY, nome TEXT)")

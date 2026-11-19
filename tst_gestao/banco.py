@@ -1,13 +1,19 @@
-"""Banco local (SQLite): usuários e o ESPELHO da URL Saúde Residence (tabelas dadosbi_*).
+"""Banco do TST-GESTÃO: usuários e o ESPELHO da URL Saúde Residence (tabelas dadosbi_*).
 
 Não há cadastro próprio de pacientes: tudo o que é clínico/operacional vem da URL e pode ser
 refeito por uma nova sincronização. O único dado que existe só aqui é a tabela de usuários.
+
+Dois motores, mesmo código SQL (com `?` como marcador):
+- SQLite (padrão): arquivo dados/tst_gestao.db, usado pelo executável no computador do cliente.
+- PostgreSQL: quando a variável DATABASE_URL existe (hospedagem no Render com banco no Neon), porque
+  o disco do Render gratuito é apagado a cada reinício.
 """
 from __future__ import annotations
 
 import os
 import sqlite3
 import sys
+import threading
 from pathlib import Path
 
 BASE_DIR = (
@@ -17,7 +23,15 @@ BASE_DIR = (
 )
 DATA_DIR = Path(os.environ.get("TST_DATA_DIR", BASE_DIR / "dados"))
 DB_PATH = DATA_DIR / "tst_gestao.db"
-ErroIntegridade = sqlite3.IntegrityError
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+POSTGRES = DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+if POSTGRES:
+    import psycopg
+
+    ErroIntegridade: tuple = (sqlite3.IntegrityError, psycopg.errors.IntegrityError)
+else:
+    ErroIntegridade = (sqlite3.IntegrityError,)
 
 # ---------------------------------------------------------------- esquema (fonte única)
 TABELAS: dict[str, str] = {
@@ -55,6 +69,15 @@ TABELAS: dict[str, str] = {
     "dadosbi_monitor": """
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         estrutura_json TEXT, categorias_json TEXT, campos_monitorados INTEGER, ultima_verificacao TEXT""",
+    # avisos na tela gerados a cada sincronização (o que mudou e pede atenção)
+    "notificacoes": """
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        criado_em TEXT NOT NULL, tipo TEXT NOT NULL, gravidade TEXT NOT NULL,
+        titulo TEXT NOT NULL, texto TEXT, link TEXT, nivel_min INTEGER NOT NULL DEFAULT 1""",
+    # fotografia da sincronização anterior, para comparar com a nova
+    "notificacoes_estado": """
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        estado_json TEXT NOT NULL, atualizado_em TEXT NOT NULL""",
     "dadosbi_alertas": """
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         tipo TEXT NOT NULL, campo TEXT NOT NULL, detalhe TEXT NOT NULL,
@@ -66,19 +89,58 @@ INDICES = [
 ]
 
 
+class Linha(dict):
+    """Linha do PostgreSQL que se comporta como a sqlite3.Row: r["coluna"], r[0], dict(r) e tuple(r) (valores).
+
+    Os valores ficam também numa lista, na ordem do SELECT: colunas com o mesmo nome (ex.: dois COUNT(*))
+    não se perdem no acesso por posição.
+    """
+
+    def __init__(self, nomes, valores):
+        super().__init__(zip(nomes, valores))
+        self._valores = list(valores)
+
+    def __iter__(self):
+        return iter(self._valores)
+
+    def __len__(self):
+        return len(self._valores)
+
+    def __getitem__(self, chave):
+        if isinstance(chave, (int, slice)):
+            return self._valores[chave]
+        return super().__getitem__(chave)
+
+
+def _fabrica_linhas(cursor):
+    nomes = [c.name for c in cursor.description or ()]
+    return lambda valores: Linha(nomes, valores)
+
+
+def _sql_pg(sql: str) -> str:
+    """Troca o marcador `?` (SQLite) por `%s` (psycopg); `%` literal passa a ser `%%`."""
+    return sql.replace("%", "%%").replace("?", "%s")
+
+
 class Conexao:
-    """Conexão SQLite usada com `with`: confirma ao sair sem erro, desfaz em caso de erro e fecha."""
+    """Conexão usada com `with`: confirma ao sair sem erro, desfaz em caso de erro e fecha (ou devolve ao pool)."""
 
     dual = ""  # mantém compatível o SQL que seleciona sem FROM
 
-    def __init__(self, raw: sqlite3.Connection):
+    def __init__(self, raw, pool=None):
         self.raw = raw
+        self._pool = pool
 
     def execute(self, sql: str, params=()):
-        return self.raw.execute(sql, params)
+        if self._pool is None:
+            return self.raw.execute(sql, params)
+        return self.raw.execute(_sql_pg(sql), params) if params else self.raw.execute(sql)
 
     def executemany(self, sql: str, linhas):
-        return self.raw.executemany(sql, linhas)
+        if self._pool is None:
+            return self.raw.executemany(sql, linhas)
+        with self.raw.cursor() as cur:
+            cur.executemany(_sql_pg(sql), list(linhas))
 
     def commit(self):
         self.raw.commit()
@@ -87,7 +149,10 @@ class Conexao:
         self.raw.rollback()
 
     def close(self):
-        self.raw.close()
+        if self._pool is None:
+            self.raw.close()
+        else:
+            self._pool.putconn(self.raw)
 
     def __enter__(self):
         return self
@@ -99,7 +164,31 @@ class Conexao:
             self.close()
 
 
+_pool = None
+_trava_pool = threading.Lock()
+
+
+def _pool_pg():
+    """Pool de conexões com o Postgres (o Neon desliga quando ocioso: a conexão é testada antes de usar)."""
+    global _pool
+    with _trava_pool:
+        if _pool is None:
+            from psycopg_pool import ConnectionPool
+
+            _pool = ConnectionPool(
+                DATABASE_URL, min_size=0, max_size=int(os.environ.get("TST_DB_POOL", "5")), open=True,
+                max_idle=120,  # fecha conexões paradas: o Neon gratuito só "dorme" (e economiza horas) sem conexões abertas
+                check=ConnectionPool.check_connection,
+                # prepare_threshold=None: compatível com o endereço "-pooler" do Neon (PgBouncer)
+                kwargs={"row_factory": _fabrica_linhas, "prepare_threshold": None, "connect_timeout": 15},
+            )
+        return _pool
+
+
 def conectar() -> Conexao:
+    if POSTGRES:
+        pool = _pool_pg()
+        return Conexao(pool.getconn(timeout=30), pool)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     raw = sqlite3.connect(DB_PATH, timeout=15)
     raw.row_factory = sqlite3.Row
@@ -109,20 +198,42 @@ def conectar() -> Conexao:
 
 
 def tabelas_existentes(con: Conexao) -> set[str]:
+    if POSTGRES:
+        return {r[0] for r in con.execute(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()")}
     return {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")}
+
+
+def _colunas(con: Conexao, tabela: str) -> set[str]:
+    if POSTGRES:
+        return {r[0] for r in con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?",
+            (tabela,))}
+    return {r[1] for r in con.execute(f"PRAGMA table_info({tabela})")}
+
+
+def _ddl(colunas: str) -> str:
+    """Ajusta a definição das colunas ao motor em uso (o esquema acima é escrito para SQLite)."""
+    if not POSTGRES:
+        return colunas
+    return (colunas.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY")
+            .replace(" COLLATE NOCASE", ""))
 
 
 def criar_estrutura(con: Conexao) -> None:
     """Cria tabelas e índices que faltam e acrescenta colunas novas em tabelas antigas."""
     existentes = tabelas_existentes(con)
     for nome, colunas in TABELAS.items():
+        colunas = _ddl(colunas)
         if nome not in existentes:
             con.execute(f"CREATE TABLE {nome} ({colunas})")
             continue
-        atuais = {r[1] for r in con.execute(f"PRAGMA table_info({nome})")}
+        atuais = _colunas(con, nome)
         for definicao in (c.strip() for c in colunas.split(",")):
             col = definicao.split()[0] if definicao else ""
             if col and col not in atuais and "NOT NULL" not in definicao and "UNIQUE" not in definicao and col.isidentifier():
                 con.execute(f"ALTER TABLE {nome} ADD COLUMN {definicao}")
     for nome, tabela, coluna in INDICES:
         con.execute(f"CREATE INDEX IF NOT EXISTS {nome} ON {tabela} ({coluna})")
+    if POSTGRES:  # no SQLite o COLLATE NOCASE já impede "Admin" e "admin" ao mesmo tempo
+        con.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_usuarios_usuario_lower ON usuarios (LOWER(usuario))")

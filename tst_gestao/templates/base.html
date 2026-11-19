@@ -34,6 +34,12 @@
     <span class="menu-sec">Ajuda</span>
     {{ item(url_for('auth.ajuda'), 'ajuda', 'info', 'Ajuda e primeiros passos') }}
   </nav>
+  {% if usuario %}
+  <div class="sino-wrap">
+    <button type="button" class="sino" id="sino" aria-label="Avisos da sincronização"><svg class="ic"><use href="#i-aviso"/></svg><span class="tx">Avisos</span><span class="sino-n">0</span></button>
+    <div class="notif-painel" id="notif-painel" hidden><div class="notif-cab"><b>Avisos da sincronização</b><small>o que mudou e pede atenção</small></div><div class="notif-lista"></div></div>
+  </div>
+  {% endif %}
   {% if sinc and sinc.ultima_sucesso %}
   <div class="sinc{{ ' erro' if sinc.status == 'erro' }}" title="Os dados vêm da URL Saúde Residence e são atualizados a cada {{ sinc.intervalo_min }} minutos.">
     <b><i></i>{{ 'Última atualização falhou' if sinc.status == 'erro' else 'Dados atualizados' }}</b>
@@ -67,7 +73,8 @@
 <script>window.NIVEL = {{ nivel }}; window.PAGINA = "{{ ativa or '' }}";</script>
 <script src="{{ url_for('static', filename='common.js') }}"></script>
 {% if usuario %}<script src="{{ url_for('static', filename='guia.js') }}"></script>
-<script src="{{ url_for('static', filename='tour.js') }}"></script>{% endif %}
+<script src="{{ url_for('static', filename='tour.js') }}"></script>
+<script src="{{ url_for('static', filename='notificacoes.js') }}"></script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -9,9 +9,8 @@ from collections import Counter
 from datetime import date, timedelta
 
 from . import operacional as op
-from .fonte import (FAIXAS_IDADE, JANELA_ATRASO, JANELA_TERAPIA, NIVEIS, NOMES_TERAPIA, TERAPIAS, Base, br, carregar, eh_monitoramento,
-                    eh_obito, em_fortaleza, faixa_idade, nivel, periodo, sem_acento, tem_terapias, chave_paciente,
-                    BAIRROS_OFICIAIS, bairro_padrao)
+from .fonte import (FAIXAS_IDADE, JANELA_ATRASO, JANELA_COBERTURA, JANELA_TERAPIA, NIVEIS, NOMES_TERAPIA, TERAPIAS, Base, br, carregar, eh_monitoramento,
+                    eh_obito, em_fortaleza, faixa_idade, nivel, periodo, sem_acento, tem_terapias, chave_paciente)
 
 MIN_MESES, MAX_MESES = 8, 24
 LIMITE_DETALHE = 5000
@@ -77,7 +76,8 @@ class _Contexto:
             self.ativos.setdefault(a["_pac"], []).append(a)
         # atendimento de referência de cada paciente ativo: o mais recente que tenha bairro (a URL nem sempre envia)
         self.rep = {p: max(lst, key=lambda a: (bool(a["bairro"]), a["data_admissao"] or "")) for p, lst in self.ativos.items()}
-        self.ter_janela = {p: t for p, t in base.terapias_por_paciente(fim).items() if p in self.ativos}
+        # terapias dos últimos 90 dias contadas só nos atendimentos ATIVOS: a alta encerra o ciclo de visitas
+        self.ter_janela = base.terapias_por_paciente(fim, so_atendimentos={a["origem_id"] for a in self.ativos_at})
         self.visitas_periodo = base.visitas_entre(ini, fim)
         self.visitados = {base.por_id[v["atendimento_origem_id"]]["_pac"] for v in self.visitas_periodo
                           if v["atendimento_origem_id"] in base.por_id}
@@ -135,7 +135,7 @@ class _Contexto:
         return {"colunas": COLS_VISITA, "linhas": linhas, "drill": {"tipo": "paciente", "col": 1}}
 
 
-METRICAS_MAPA = ["ativos", "em_terapia", "pendentes", "visitas", "profissionais", "relatorios"]
+METRICAS_MAPA = ["ativos", "em_terapia", "pendentes", "visitas", "profissionais", "cobertura", "altas", "relatorios"]
 TODAS = "*"
 
 
@@ -193,7 +193,54 @@ def _mapa_conjuntos(base: Base, c: "_Contexto", por: str = "bairro") -> tuple[di
         if a and (k := chave_atend(a)):
             for sig in (rel["terapia"], TODAS):
                 caixa(k, "relatorios", sig, list).append(rel)
+    # altas do período (sem óbitos), pelo bairro/zona do atendimento que recebeu a alta
+    for a in base.atend:
+        if a["_alta"] and c.ini <= a["_alta"] <= c.fim and not eh_obito(a) and (k := chave_atend(a)):
+            caixa(k, "altas", TODAS, list).append(a)
+    # cobertura: profissionais com visita no bairro/zona nos últimos JANELA_COBERTURA dias, mesmo sem visita no período
+    inicio_cob = c.fim - timedelta(days=JANELA_COBERTURA - 1)
+    for v in base.visitas:
+        if not inicio_cob <= v["_data"] <= c.fim:
+            continue
+        a = base.por_id.get(v["atendimento_origem_id"])
+        if a and (k := chave_atend(a)) and (prof := op.chave_profissional(v)):
+            for sig in (v["_ter"], TODAS):
+                caixa(k, "cobertura", sig).add(prof)
     return mapa, fora
+
+
+COLS_COBERTURA = ["Profissional", "Terapia", "Situação", f"Pacientes ({JANELA_COBERTURA} d)", "Visitas no período",
+                  f"Visitas ({JANELA_COBERTURA} d)", "Última visita"]
+
+
+def cobertura(base: Base, c: "_Contexto", lugar: str, por: str = "bairro", sig: str = TODAS) -> list[list]:
+    """Profissionais que cobrem o bairro/zona: visitaram alguém lá nos últimos JANELA_COBERTURA dias.
+
+    Situação "Atendendo no período" quando houve visita dentro do período; senão "Cobre o bairro" (atendeu antes,
+    mas não no período). A última coluna (oculta) é a chave do profissional, para abrir o resumo dele.
+    """
+    inicio_cob = c.fim - timedelta(days=JANELA_COBERTURA - 1)
+    grupos: dict[str, dict] = {}
+    for v in base.visitas:
+        if not inicio_cob <= v["_data"] <= c.fim or (sig != TODAS and v["_ter"] != sig):
+            continue
+        a = base.por_id.get(v["atendimento_origem_id"])
+        if not a:
+            continue
+        aqui = a["zona"] == lugar if por == "zona" else (a["bairro"] == lugar and em_fortaleza(a))
+        chave = op.chave_profissional(v)
+        if not aqui or not chave:
+            continue
+        g = grupos.setdefault(chave, {"nome": v["profissional"] or "Sem nome", "ter": Counter(), "pac": set(), "vis": 0, "vis_per": 0,
+                                      "ultima": v["_data"]})
+        g["ter"][v["_ter"]] += 1
+        g["pac"].add(a["_pac"])
+        g["vis"] += 1
+        g["vis_per"] += c.ini <= v["_data"]
+        g["ultima"] = max(g["ultima"], v["_data"])
+    linhas = [[g["nome"], g["ter"].most_common(1)[0][0], "Atendendo no período" if g["vis_per"] else "Cobre o bairro" if por == "bairro" else "Cobre a zona",
+               len(g["pac"]), g["vis_per"], g["vis"], br(g["ultima"]), k] for k, g in grupos.items()]
+    return sorted(linhas, key=lambda l: (l[4] == 0, -l[4], -l[5], l[0]))
 
 
 # ---------------------------------------------------------------- orçamentos dos atendimentos ativos
@@ -443,11 +490,16 @@ def detalhe(tipo: str, valor: str | None, ini: date | None = None, fim: date | N
         ter = "" if sig == TODAS else f" · {NOMES_TERAPIA.get(sig, sig)}"
         nomes = {"ativos": "Pacientes ativos", "em_terapia": f"Pacientes em terapia ({janela})",
                  "pendentes": "Pacientes com terapia pendente", "visitas": f"Visitas ({rot})",
-                 "profissionais": f"Profissionais que atenderam ({rot})", "relatorios": "Relatórios pendentes"}
+                 "profissionais": f"Profissionais que atenderam ({rot})", "relatorios": "Relatórios pendentes",
+                 "cobertura": f"Profissionais que cobrem (últimos {JANELA_COBERTURA} dias)", "altas": f"Altas ({rot})"}
         lugar = f"zona {base.zonas.get(bairro, {}).get('nome', bairro)}" if por == "zona" else bairro
         titulo = f"{nomes[metrica]}{ter} — {lugar}"
         if metrica == "visitas":
             r = c.linhas_visitas(list(itens))
+        elif metrica == "altas":
+            r = c.linhas_atendimentos(list(itens))
+        elif metrica == "cobertura":
+            r = {"colunas": COLS_COBERTURA, "linhas": cobertura(base, c, bairro, por, sig), "drill": None}
         elif metrica == "relatorios":
             r = op.linhas_relatorios(list(itens))
         elif metrica == "profissionais":
@@ -483,75 +535,3 @@ def detalhe(tipo: str, valor: str | None, ini: date | None = None, fim: date | N
     total = len(r["linhas"])
     return {"titulo": titulo, "colunas": r["colunas"], "linhas": r["linhas"][:LIMITE_DETALHE], "drill": r.get("drill"),
             "total": total, "truncado": total > LIMITE_DETALHE}
-
-
-
-# ---------------------------------------------------------------- ficha do bairro (clique no mapa)
-def ficha_bairro(nome: str, ini: date | None = None, fim: date | None = None) -> dict:
-    """Tudo o que está ligado a um bairro de Fortaleza no período: profissionais, pacientes, terapias, relatórios e zonas."""
-    ini, fim = periodo(ini, fim)
-    base = carregar()
-    c = _Contexto(base, ini, fim)
-    bairro = bairro_padrao(nome) or " ".join(sem_acento(nome).upper().split())
-    conj = _mapa_conjuntos(base, c)[0].get(bairro, {})
-    tot = lambda m: conj.get(m, {}).get(TODAS, ())  # noqa: E731
-
-    # profissionais com visita no bairro durante o período
-    profs: dict[str, dict] = {}
-    for v in tot("visitas"):
-        g = profs.setdefault(op.chave_profissional(v) or "?", {"nome": v["profissional"] or "Sem nome", "ter": Counter(),
-                                                                 "pac": set(), "vis": 0, "ultima": v["_data"]})
-        g["ter"][v["_ter"]] += 1
-        g["pac"].add(base.por_id[v["atendimento_origem_id"]]["_pac"])
-        g["vis"] += 1
-        g["ultima"] = max(g["ultima"], v["_data"])
-    profissionais = [[g["nome"], g["ter"].most_common(1)[0][0], len(g["pac"]), g["vis"], br(g["ultima"]), chave]
-                     for chave, g in sorted(profs.items(), key=lambda kv: (-kv[1]["vis"], kv[1]["nome"]))]
-
-    # pacientes ativos do bairro: terapias, pendências e quem os atendeu nos últimos JANELA_TERAPIA dias
-    pacientes_bairro = tot("ativos")
-    janela_ini = fim - timedelta(days=JANELA_TERAPIA - 1)
-    quem: dict[str, set] = {}
-    for v in base.visitas:
-        a = base.por_id.get(v["atendimento_origem_id"])
-        if a and a["_pac"] in pacientes_bairro and janela_ini <= v["_data"] <= fim and v["profissional"]:
-            quem.setdefault(a["_pac"], set()).add(f'{v["profissional"]} ({v["_ter"]})')
-    ult = c.ultima_visita()
-    pendencias = {p: [NOMES_TERAPIA.get(t, t) if t != SEM_ATENDIMENTO else "nenhuma terapia em 90 dias"
-                      for t, ps in c.pend.items() if p in ps] for p in pacientes_bairro}
-    pacientes = []
-    for p in sorted(pacientes_bairro, key=lambda p: c.rep[p]["nome_paciente"].casefold()):
-        lst, r = c.ativos[p], c.rep[p]
-        ters = c.ter_janela.get(p, {})
-        pacientes.append([r["nome_paciente"], " · ".join(sorted({a["operadora"] or "—" for a in lst})),
-                          " · ".join(sorted({a["servico"] or "—" for a in lst})),
-                          " · ".join(t for t in TERAPIAS if t in ters) or "—",
-                          ", ".join(pendencias[p]) or "—", "; ".join(sorted(quem.get(p, ()))) or "—", br(ult.get(p))])
-
-    terapias = []
-    for t in TERAPIAS:
-        em = len(conj.get("em_terapia", {}).get(t, ()))
-        vis = conj.get("visitas", {}).get(t, [])
-        if em or vis or conj.get("pendentes", {}).get(t):
-            terapias.append({"sigla": t, "nome": NOMES_TERAPIA[t], "pacientes": em,
-                             "pendentes": len(conj.get("pendentes", {}).get(t, ())), "visitas": len(vis),
-                             "profissionais": len(conj.get("profissionais", {}).get(t, ()))})
-    return {
-        "bairro": bairro, "oficial": bairro in BAIRROS_OFICIAIS,
-        "periodo": {"ini": ini.isoformat(), "fim": fim.isoformat()},
-        "zonas": sorted(({"id": z, "nome": info["nome"]} for z, info in base.zonas.items() if bairro in info["bairros"]),
-                        key=lambda z: z["nome"]),
-        "resumo": {m: len(tot(m)) for m in METRICAS_MAPA} | {"sem_terapia": len(conj.get("pendentes", {}).get(SEM_ATENDIMENTO, ()))},
-        "profissionais": {"colunas": ["Profissional", "Terapia", "Pacientes no bairro", "Visitas no bairro", "Última visita"],
-                          "linhas": profissionais},
-        "pacientes": {"colunas": ["Paciente", "Operadora", "Serviço", f"Terapias ({JANELA_TERAPIA} d)", "Pendências",
-                                  f"Atendido por ({JANELA_TERAPIA} d)", "Última visita"], "linhas": pacientes},
-        "terapias": terapias,
-        "relatorios": op.linhas_relatorios(list(tot("relatorios"))),
-        "operadoras": _top(Counter(o for p in pacientes_bairro for o in {a["operadora"] or "Não informada" for a in c.ativos[p]})),
-    }
-
-
-def historico_paciente(nome: str) -> dict:
-    """Visitas de todos os atendimentos do paciente (usado também pelo Painel operacional)."""
-    return detalhe("paciente", nome)

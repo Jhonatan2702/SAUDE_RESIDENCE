@@ -1,6 +1,7 @@
 """Aplicação Flask do TST-GESTÃO: painéis sobre o espelho da URL Saúde Residence."""
 from __future__ import annotations
 
+import os
 import secrets
 
 from flask import Flask, jsonify, render_template, request, session
@@ -12,6 +13,8 @@ from .seguranca import nivel_atual, proteger, usuario_atual
 
 
 def _chave_secreta() -> str:
+    if os.environ.get("SECRET_KEY"):  # hospedagem: o disco é apagado a cada reinício, a chave vem do ambiente
+        return os.environ["SECRET_KEY"]
     arquivo = DATA_DIR / ".secret_key"
     if not arquivo.exists():
         arquivo.write_text(secrets.token_hex(32))
@@ -23,6 +26,16 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = _chave_secreta()
     app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_HTTPONLY=True, MAX_CONTENT_LENGTH=2_000_000)
+    if os.environ.get("TST_HOSPEDADO"):  # atrás do proxy HTTPS do Render
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+        app.config.update(SESSION_COOKIE_SECURE=True)
+
+    @app.get("/saude", endpoint="saude")
+    def saude():
+        """Verificação de vida para o Render e para o serviço que mantém o site acordado (não abre o banco)."""
+        return {"ok": True, "versao": versao.VERSAO}
 
     app.before_request(proteger)
     for bp in (auth.bp, paineis.bp, admin.bp):

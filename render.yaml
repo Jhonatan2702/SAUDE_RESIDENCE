@@ -1,0 +1,25 @@
+# Blueprint do Render (plano gratuito). Os valores sensíveis NÃO ficam aqui: o Render pede cada um
+# (sync: false) na hora de criar o serviço. Veja "Hospedagem no Render" no README.
+services:
+  - type: web
+    name: tst-gestao
+    runtime: python
+    plan: free
+    region: virginia            # mesma região do banco no Neon (AWS us-east-1) = respostas rápidas
+    buildCommand: pip install -r requirements-servidor.txt
+    startCommand: gunicorn wsgi:app --workers 1 --threads 8 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /saude
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6
+      - key: TST_HOSPEDADO
+        value: "1"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL          # connection string do Neon
+        sync: false
+      - key: TST_ADMIN_SENHA       # senha do primeiro login do admin (troca obrigatória no 1º acesso)
+        sync: false
+      - key: TST_DADOSBI_URL       # URL da Saúde Residence
+        sync: false

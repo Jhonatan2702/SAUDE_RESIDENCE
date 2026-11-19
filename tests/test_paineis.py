@@ -133,7 +133,7 @@ def test_mapa_por_bairro(admin, dados):
 
 def test_bairro_sem_cobertura(admin, dados):
     abr = admin.get(f"/api/operacional/abrangencia?{P}").get_json()
-    assert abr["sem_cobertura"] == [{"bairro": "ALDEOTA", "pacientes": 1}]
+    assert abr["sem_cobertura"] == [{"bairro": "ALDEOTA", "pacientes": 1, "cobrem": []}]  # ninguém em 180 dias
     assert abr["indicados_bairro"]["PARQUELANDIA"] == 1
 
 
@@ -160,19 +160,119 @@ def test_zonas_de_atendimento(admin, dados):
     assert ["Prof. Fisio", "FISIO", "ALDEOTA 1", "PARQUELANDIA", "FORTALEZA", 2, 2] in abr["linhas"]
 
 
+def _aba(f, id_):
+    return next(a for a in f["abas"] if a["id"] == id_)
+
+
 def test_ficha_do_bairro(admin, dados, criar_usuario):
-    f = admin.get(f"/api/bairro?nome=Parquelândia&{P}").get_json()
-    assert f["bairro"] == "PARQUELANDIA" and f["oficial"] and [z["nome"] for z in f["zonas"]] == ["ALDEOTA 1", "MONTESE 1"]
-    assert f["resumo"]["ativos"] == 2 and f["resumo"]["profissionais"] == 4 and f["resumo"]["relatorios"] == 1
-    prof = {l[0]: l for l in f["profissionais"]["linhas"]}
-    assert prof["Prof. Fisio"][2:5] == [2, 2, "20/10/2026"] and prof["Prof. Fisio"][5] == "id:10"
-    pac = {l[0]: l for l in f["pacientes"]["linhas"]}
+    f = admin.get(f"/api/ficha/bairro?valor=Parquelândia&{P}").get_json()
+    assert f["tipo"] == "bairro" and f["titulo"] == "PARQUELANDIA" and f["oficial"]
+    assert [c["texto"] for c in f["chips"]] == ["Zona ALDEOTA 1", "Zona MONTESE 1"]
+    k = {x["rotulo"]: x["valor"] for x in f["kpis"]}
+    assert (k["Pacientes ativos"], k["Profissionais"], k["Relatórios pendentes"]) == (2, 4, 1)
+    prof = {l[0]: l for l in _aba(f, "profissionais")["linhas"]}
+    assert prof["Prof. Fisio"][2:8] == ["Atendendo no período", 2, 2, 2, "20/10/2026", "id:10"]
+    assert _aba(f, "profissionais")["abrir"] == {"tipo": "profissional", "col": 7}
+    # Prof. Nutri não visitou ninguém em outubro, mas atendeu a Ana (Parquelândia) em agosto: cobre o bairro
+    assert prof["Prof. Nutri"][2:5] == ["Cobre o bairro", 1, 0]
+    pac = {l[0]: l for l in _aba(f, "pacientes")["linhas"]}
     assert pac["Ana Souza"][4] == "Nutrição" and "Prof. Fono (FONO)" in pac["Ana Souza"][5]
-    assert pac["Davi Rocha"][3] == "FISIO · FONO · TO · PSICO"
-    assert {t["sigla"] for t in f["terapias"]} == {"FISIO", "FONO", "TO", "NUTRI", "PSICO"}
-    # o perfil Operacional também abre a ficha (mapa de cobertura) e o histórico de um paciente
+    # o perfil Operacional também abre as fichas (mapa de cobertura, listas)
     op = criar_usuario("operador4", "operacional")
-    assert op.get(f"/api/bairro?nome=Aldeota&{P}").get_json()["resumo"]["pendentes"] == 1
-    assert op.get("/api/historico?paciente=Davi Rocha").get_json()["total"] == 4
-    assert op.get("/api/historico?paciente=Ninguém").status_code == 404
-    assert op.get("/api/bairro").status_code == 400
+    assert op.get(f"/api/ficha/bairro?valor=Aldeota&{P}").get_json()["kpis"][2]["valor"] == 1
+    assert op.get(f"/api/ficha/paciente?valor=Ninguém&{P}").status_code == 404
+    assert op.get("/api/ficha/bairro").status_code == 400 and op.get("/api/ficha/outro?valor=x").status_code == 404
+
+
+def test_ficha_do_profissional(admin, dados):
+    f = admin.get(f"/api/ficha/profissional?valor=id:10&{P}").get_json()
+    assert f["titulo"] == "Prof. Fisio" and f["chips"][0]["texto"] == "Fisioterapia"
+    k = {x["rotulo"]: x["valor"] for x in f["kpis"]}
+    assert (k["Visitas"], k["Pacientes"], k["Dias com visita"], k["Relatórios pendentes"]) == (3, 3, 2, 1)  # Ana e Davi no mesmo dia
+    pacs = {l[0]: l for l in _aba(f, "pacientes")["linhas"]}
+    assert set(pacs) == {"Ana Souza", "Carla Dias", "Davi Rocha"}
+    assert pacs["Carla Dias"][8] == "Óbito" and pacs["Ana Souza"][8] == "Ativo"
+    assert {l[0] for l in _aba(f, "regiao")["linhas"]} >= {"PARQUELANDIA"}
+    assert _aba(f, "mensal")["itens"][0] == {"rotulo": "out/26", "valor": 3}
+    # também abre pelo nome (ex.: vindo da lista de relatórios por profissional)
+    assert admin.get(f"/api/ficha/profissional?valor=Prof. Nutri&{P}").get_json()["titulo"] == "Prof. Nutri"
+    nutri = admin.get(f"/api/ficha/profissional?valor=id:12&{P}").get_json()
+    pend = _aba(nutri, "pendencias")["linhas"]
+    assert pend and pend[0][0] == "Ana Souza" and pend[0][1] == "Nutrição" and pend[0][4] == 77  # 15/08 → 31/10
+
+
+def test_ficha_do_paciente(admin, dados):
+    f = admin.get(f"/api/ficha/paciente?valor=ana souza&{P}").get_json()
+    assert f["titulo"] == "Ana Souza" and f["chips"][0]["texto"] == "Ativo"
+    assert "Terapia pendente" in [c["texto"] for c in f["chips"]]
+    dados_ = dict(_aba(f, "dados")["pares"])
+    assert dados_["Idade"] == "81 anos" and dados_["Zona de atendimento"] == "ALDEOTA 1" and dados_["Monitoramento com terapias"] == "Sim"
+    assert dados_["Complexidade (pelas terapias, 90 dias)"] == "Intermediário"
+    ter = {l[0]: l for l in _aba(f, "terapias")["linhas"]}
+    assert ter["Fisioterapia"][1] == "Em dia" and ter["Nutrição"][1] == "Pendente há 77 dias"
+    atend = _aba(f, "atendimentos")["linhas"]
+    assert len(atend) == 2 and {a[0] for a in atend} == {"1", "2"}
+    assert any(a[9] == "Vence em até 7 dias" for a in atend)
+    assert len(_aba(f, "visitas")["linhas"]) == 3 and len(_aba(f, "relatorios")["linhas"]) == 1
+    assert {l[0] for l in _aba(f, "profissionais")["linhas"]} == {"Prof. Fisio", "Prof. Fono", "Prof. Nutri"}
+
+
+def test_busca_rapida(admin, dados, criar_usuario):
+    r = criar_usuario("operador6", "operacional").get("/api/busca?q=souz").get_json()
+    assert [p["nome"] for p in r["pacientes"]] == ["Ana Souza"]
+    r = admin.get("/api/busca?q=prof. f").get_json()
+    assert {p["nome"] for p in r["profissionais"]} == {"Prof. Fisio", "Prof. Fono"} and r["profissionais"][0]["chave"].startswith("id:")
+    assert admin.get("/api/busca?q=a").get_json() == {"pacientes": [], "profissionais": []}
+
+
+def test_altas_e_cobertura_sem_visita_no_periodo(admin, app, url_falsa):
+    from tst_gestao import espelho
+    url_falsa["payload"]["dados"].append(
+        {"id": 6, "nmpaciente": "Eva Lima", "nmservico": "Monitoramento", "possuiterapias": "SIM", "status": "ALTA",
+         "dataadmissao": "01/03/2026", "dataalta": "20/10/2026", "condicaoalta": "Alta de procedimento(s)", "nmoperadora": "CASSI",
+         "bairro": "Varjota", "cidade": "Fortaleza",
+         "visitas": [{"id": 109, "idadmission": 6, "datavisita": "10/06/2026", "nmespecialidade": "Fonoaudiologia",
+                      "nmprofessional": "Prof. Fono", "idprofessional": 11}]})
+    espelho.sincronizar()
+    d = admin.get(f"/api/painel?{P}").get_json()
+    assert d["mapa"]["VARJOTA"]["altas"]["*"] == 1
+    assert d["mapa"]["VARJOTA"]["cobertura"]["*"] == 1  # ninguém visitou em outubro, mas o Prof. Fono cobre
+    assert not d["mapa"]["VARJOTA"]["profissionais"].get("*")
+    f = admin.get(f"/api/ficha/bairro?valor=Varjota&{P}").get_json()
+    assert [l[0] for l in _aba(f, "altas")["linhas"]] == ["Eva Lima"]
+    assert _aba(f, "profissionais")["linhas"][0][:3] == ["Prof. Fono", "FONO", "Cobre o bairro"]
+    fono = admin.get(f"/api/ficha/profissional?valor=id:11&{P}").get_json()
+    assert "Eva Lima" in [l[0] for l in _aba(fono, "altas")["linhas"]]
+    regiao = {l[0]: l for l in _aba(fono, "regiao")["linhas"]}
+    assert regiao["VARJOTA"][5] == "Cobre o bairro" and regiao["PARQUELANDIA"][5] == "Atendendo no período"
+    det = admin.get(f"/api/painel/detalhe?tipo=mapa&valor=cobertura|*|VARJOTA&{P}").get_json()
+    assert det["linhas"][0][0] == "Prof. Fono" and det["linhas"][0][2] == "Cobre o bairro"
+
+
+def test_alta_encerra_o_ciclo_de_visitas(admin, app, url_falsa):
+    """Visitas de um atendimento que já recebeu alta não geram pendência, mesmo se o paciente foi readmitido."""
+    from tst_gestao import espelho
+    url_falsa["payload"]["dados"] += [
+        # Gil fez Fisio no atendimento 8 (alta em 05/10) e foi readmitido no 9, ainda sem visita de terapia
+        {"id": 8, "nmpaciente": "Gil Prado", "nmservico": "Internação Domiciliar", "possuiterapias": "SIM", "status": "ALTA",
+         "dataadmissao": "01/06/2026", "dataalta": "05/10/2026", "condicaoalta": "Alta de procedimento(s)", "nmoperadora": "CASSI",
+         "bairro": "Centro", "cidade": "Fortaleza",
+         "visitas": [{"id": 110, "idadmission": 8, "datavisita": "03/10/2026", "nmespecialidade": "Fisioterapia Respiratória e/ou Motora",
+                      "nmprofessional": "Prof. Fisio", "idprofessional": 10}]},
+        {"id": 9, "nmpaciente": "Gil Prado", "nmservico": "Internação Domiciliar", "possuiterapias": "SIM", "status": "EM ATENDIMENTO",
+         "dataadmissao": "20/10/2026", "nmoperadora": "CASSI", "bairro": "Centro", "cidade": "Fortaleza", "visitas": []},
+        # Hugo recebeu alta e não voltou: não pode aparecer em nenhuma pendência
+        {"id": 10, "nmpaciente": "Hugo Melo", "nmservico": "Monitoramento", "possuiterapias": "SIM", "status": "ALTA",
+         "dataadmissao": "01/05/2026", "dataalta": "10/10/2026", "condicaoalta": "Saida", "nmoperadora": "CASSI",
+         "visitas": [{"id": 111, "idadmission": 10, "datavisita": "01/09/2026", "nmespecialidade": "Fonoaudiologia",
+                      "nmprofessional": "Prof. Fono", "idprofessional": 11}]},
+    ]
+    espelho.sincronizar()
+    pend = {tipo: {l[0] for l in admin.get(f"/api/painel/detalhe?tipo=pendentes&valor={tipo}&{P}").get_json()["linhas"]}
+            for tipo in ("FISIO", "FONO", "SEM")}
+    assert "Gil Prado" not in pend["FISIO"]  # a Fisio era do atendimento encerrado
+    assert "Gil Prado" in pend["SEM"]        # o novo atendimento tem terapia indicada e nenhuma visita ainda
+    assert "Hugo Melo" not in pend["FONO"] | pend["SEM"]
+    gil = admin.get(f"/api/ficha/paciente?valor=Gil Prado&{P}").get_json()
+    ter = {l[0]: l[1] for l in next(a for a in gil["abas"] if a["id"] == "terapias")["linhas"]}
+    assert ter["Fisioterapia"] == "Encerrada com a alta de 05/10/2026"

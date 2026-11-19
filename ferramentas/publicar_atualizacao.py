@@ -68,6 +68,23 @@ def assinar(notas: str) -> dict:
     return dados
 
 
+def config_do_cliente() -> None:
+    """Cria dist/config.json com a URL deste computador, para copiar na pasta dados do cliente na instalação manual.
+
+    NUNCA é publicado: a publicação envia só o .exe e o versao.json, e a pasta dist/ fica fora do Git.
+    """
+    origem = RAIZ / "dados" / "config.json"
+    try:
+        url_dados = json.loads(origem.read_text(encoding="utf-8")).get("url_dadosbi")
+    except (OSError, ValueError):
+        url_dados = None
+    if not url_dados:
+        print("Aviso: este computador não tem a URL configurada; dist/config.json não foi criado.")
+        return
+    (DIST / "config.json").write_text(json.dumps({"url_dadosbi": url_dados}, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"Configuração do cliente pronta: {DIST / 'config.json'} (copie para a pasta dados do cliente; não vai para o GitHub)")
+
+
 def _gh(metodo: str, url: str, token: str, corpo: bytes | None = None, tipo: str = "application/json") -> dict:
     req = urllib.request.Request(url, data=corpo, method=metodo, headers={
         "Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "Content-Type": tipo,
@@ -106,6 +123,7 @@ def main() -> None:
     if "--sem-build" not in sys.argv:
         gerar_exe()
     dados = assinar(notas)
+    config_do_cliente()
     token = os.environ.get("GITHUB_TOKEN") or (TOKEN_ARQ.read_text().strip() if TOKEN_ARQ.exists() else "")
     if "--sem-publicar" in sys.argv or not token:
         print("\nPara publicar pela web (sem token):")

@@ -5,6 +5,7 @@ from datetime import date
 
 from flask import Blueprint, abort, jsonify, render_template, request
 
+from .. import fichas, notificacoes
 from .. import operacional as op
 from .. import painel as pn
 from ..seguranca import exige
@@ -70,21 +71,36 @@ def api_operacional(secao):
     abort(404)
 
 
-@bp.get("/api/bairro")
+@bp.get("/api/ficha/<tipo>")
 @exige("operacional")
-def api_bairro():
-    """Ficha do bairro clicado no mapa (Painel BI e mapa de cobertura do Painel operacional)."""
-    nome = request.args.get("nome", "").strip()
-    if not nome:
-        abort(400, "Informe o bairro.")
-    return jsonify(pn.ficha_bairro(nome, *datas()))
-
-
-@bp.get("/api/historico")
-@exige("operacional")
-def api_historico():
-    """Histórico de visitas de um paciente (aberto a partir das listas)."""
+def api_ficha(tipo):
+    """Resumo completo de um bairro, profissional ou paciente (aberto pelo clique ou pela busca)."""
+    valor = request.args.get("valor", "").strip()
+    funcao = {"bairro": fichas.ficha_bairro, "profissional": fichas.ficha_profissional, "paciente": fichas.ficha_paciente}.get(tipo)
+    if not funcao:
+        abort(404)
+    if not valor:
+        abort(400, "Informe quem deve ser aberto.")
     try:
-        return jsonify(pn.historico_paciente(request.args.get("paciente", "")))
+        return jsonify(funcao(valor, *datas()))
     except ValueError as exc:
         return jsonify(erro=str(exc)), 404
+
+
+@bp.get("/api/busca")
+@exige("operacional")
+def api_busca():
+    """Busca rápida de pacientes e profissionais pelo nome (campo no topo dos painéis)."""
+    return jsonify(fichas.buscar(request.args.get("q", "")))
+
+
+@bp.get("/api/notificacoes")
+@exige("operacional")
+def api_notificacoes():
+    """Avisos gerados nas sincronizações, filtrados pelo perfil de quem está vendo."""
+    from ..seguranca import nivel_atual
+    try:
+        desde = int(request.args.get("desde", 0))
+    except ValueError:
+        desde = 0
+    return jsonify(notificacoes.listar(nivel_atual(), desde))

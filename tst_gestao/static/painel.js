@@ -7,6 +7,7 @@
 
   const det = Detalhe((tipo, valor) => {
     if (tipo === 'ficha') { FichaBairro.abrir(valor); return null; }
+    if (tipo === 'paciente') { Ficha.abrir('paciente', valor); return null; }  // resumo completo do paciente
     const P = periodo.valor();
     return api('/api/painel/detalhe?' + new URLSearchParams({tipo, valor, ini: P.ini, fim: P.fim}));
   });
@@ -15,7 +16,7 @@
   FichaBairro.configurar(() => periodo.valor());
 
   const tObitos = Tabela('t-obitos', {aoClicar: l => det.abrir('paciente', l[0]), numericas: [7], vazio: 'Nenhum óbito no período.'});
-  const tProf = Tabela('t-prof', {aoClicar: l => det.abrir('profissional', l[0]), numericas: [2, 3, 4, 5], vazio: 'Nenhuma visita no período.'});
+  const tProf = Tabela('t-prof', {aoClicar: l => Ficha.abrir('profissional', l[6]), numericas: [2, 3, 4, 5], vazio: 'Nenhuma visita no período.'});
   const tAbr = Tabela('t-abr', {busca: 'abr-busca', contador: 'abr-n', numericas: [5, 6], vazio: 'Nenhuma visita no período.',
     aoClicar: l => FichaBairro.abrir(l[3])});
 
@@ -49,7 +50,11 @@
       {tom: 'warn', icone: 'pendencia', rotulo: 'Pacientes com terapia pendente', valor: fmt(k.pendentes), det: 'pendentes',
         sub: `de <b>${fmt(k.em_terapia)}</b> pacientes em terapia`, info: `Pacientes ativos sem visita há mais de ${d.janelas.atraso} dias numa terapia em andamento, ou indicados com terapias e sem nenhuma visita de terapia em ${d.janelas.terapia} dias.`},
       {tom: 'ok', icone: 'admissao', rotulo: 'Admissões no período', valor: fmt(k.admissoes), det: 'admissoes',
-        sub: `<b>${fmt(k.altas)}</b> altas (sem contar óbitos)`, info: 'Atendimentos com data de admissão dentro do período.'},
+        sub: `saldo do período: <b>${k.admissoes - k.altas - k.obitos >= 0 ? '+' : ''}${fmt(k.admissoes - k.altas - k.obitos)}</b> (entradas − altas − óbitos)`,
+        info: 'Atendimentos com data de admissão dentro do período.'},
+      {tom: 'acc', icone: 'alta', rotulo: 'Altas no período', valor: fmt(k.altas), det: 'altas',
+        sub: `<b>${fmt(k.obitos)}</b> óbito(s) contados à parte`,
+        info: 'Atendimentos que receberam alta dentro do período, por qualquer motivo exceto óbito. Clique para ver os pacientes, a data e o motivo da alta.'},
       {tom: 'neutro', icone: 'evolucao', rotulo: 'Visitas no período', valor: fmt(k.visitas), det: 'visitas',
         sub: `<b>${fmt(k.pacientes_visitados)}</b> pacientes ativos visitados`, info: 'Visitas registradas pelos profissionais dentro do período.'},
       {tom: 'warn', icone: 'aviso', rotulo: 'Ativos sem visita no período', valor: fmt(k.sem_visita), det: 'sem_visita',
@@ -170,6 +175,10 @@
       desc: 'Visitas registradas no período em atendimentos do bairro.'},
     profissionais: {nome: 'Profissionais que atenderam', un: 'profissional(is) no período', rampa: 'azul', porTerapia: true,
       desc: 'Profissionais diferentes com ao menos uma visita no bairro durante o período: a cobertura observada.'},
+    cobertura: {nome: 'Profissionais que cobrem', un: 'profissional(is) que cobrem o bairro', rampa: 'azul', porTerapia: true,
+      desc: 'Profissionais que atenderam alguém no bairro nos últimos 180 dias, mesmo sem visita no período: quem cobre a região. Contorno laranja = bairro com pacientes e sem visita no período, mas com alguém que cobre; vermelho = ninguém em 180 dias.'},
+    altas: {nome: 'Altas no período', un: 'alta(s) no período', rampa: 'azul', porTerapia: false,
+      desc: 'Atendimentos que receberam alta no período (sem contar óbitos), pelo bairro do atendimento.'},
     relatorios: {nome: 'Relatórios pendentes', un: 'relatório(s) pendente(s)', rampa: 'laranja', porTerapia: true,
       desc: 'Relatórios pendentes da lista atual da URL, pelo bairro do atendimento.'},
   };
@@ -189,7 +198,7 @@
       const soma = m => Object.keys(d.mapa).reduce((s, b) => s + valorMapa(b, m), 0);
       el.innerHTML = `<h3>Fortaleza</h3><span class="muted">${fmt(Object.keys(d.mapa).length)} bairros com pacientes${esc(nomeTer(terapiaMapa))}. ` +
         'Passe o mouse sobre um bairro ou clique para fixá-lo.</span><dl>' +
-        ['ativos', 'em_terapia', 'pendentes', 'visitas', 'relatorios'].map(m =>
+        ['ativos', 'em_terapia', 'pendentes', 'visitas', 'altas', 'relatorios'].map(m =>
           `<dt class="${m === metrica ? 'on' : ''}">${METRICAS[m].nome}</dt><dd>${fmt(soma(m))}</dd>`).join('') + '</dl>';
       return;
     }
@@ -215,7 +224,15 @@
     $('mapa-desc').textContent = M.desc + (M.porTerapia && terapiaMapa !== '*' ? ` Filtro: ${nomeTer(terapiaMapa).slice(3)}.` : '');
     $('mapa-nota').textContent = metrica === 'profissionais' ? '' : `${fmt(total)} no total`;
     const zona = d.zonas_info[$('mapa-zona').value];
-    const fora = await mapaFor.desenhar(dados, {rampa: M.rampa, destaque: new Set(zona ? zona.bairros : [])});
+    // ao olhar profissionais: destaca bairros com pacientes e sem visita no período (laranja se alguém cobre, vermelho se ninguém)
+    const alerta = new Set(), atencao = new Set();
+    if (metrica === 'profissionais' || metrica === 'cobertura') {
+      Object.entries(d.mapa).forEach(([b, m]) => {
+        if (!m.ativos?.['*'] || m.profissionais?.['*']) return;
+        (m.cobertura?.['*'] ? atencao : alerta).add(MapaFortaleza.norm(b));
+      });
+    }
+    const fora = await mapaFor.desenhar(dados, {rampa: M.rampa, alerta, atencao, destaque: new Set(zona ? zona.bairros : [])});
     const f = d.mapa_fora;
     $('mapa-fora').textContent = [
       fora.length ? `Não encontrados entre os bairros oficiais de Fortaleza: ${fora.join(', ')}.` : '',
@@ -245,7 +262,7 @@
   // ------------------------------------------------------------ Profissionais
   function profissionais() {
     tProf.dados(['Profissional', 'Terapia', 'Visitas', 'Pacientes', 'Dias com visita', 'Bairros'],
-      d.profissionais.map(p => [p.nome, p.terapia, p.visitas, p.pacientes, p.dias, p.bairros]));
+      d.profissionais.map(p => Object.assign([p.nome, p.terapia, p.visitas, p.pacientes, p.dias, p.bairros], {6: p.chave})));
     $('rel-nota').textContent = `${fmt(d.kpis.relatorios_pendentes)} no total`;
     listaBarras('l-rel', d.relatorios_terapia, {det: 'relatorios', rotulo: i => NOMES[i.rotulo] || i.rotulo, cor: i => corTerapia(i.rotulo)});
   }

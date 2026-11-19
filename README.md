@@ -17,7 +17,7 @@ O sistema não tem cadastro próprio de pacientes. O banco local (SQLite) guarda
 
 > O espelho só é atualizado enquanto o aplicativo está aberto. Deixe o TST-GESTÃO rodando no computador servidor.
 
-> **Primeira instalação:** em *Integração com a URL*, informe o endereço da Saúde Residence. Ele fica só em `dados\config.json` (nunca dentro do programa, que é publicado para as atualizações).
+> **Primeira instalação:** copie `dist\config.json` (gerado junto com o `.exe`) para a pasta `dados` do cliente: a URL da Saúde Residence já vem configurada e fica **fixa** na tela de *Integração com a URL*, com o botão *Alterar endereço* para mudar à mão se preciso. A URL fica só em `dados\config.json`, nunca dentro do programa, que é publicado para as atualizações, e as atualizações automáticas preservam esse arquivo.
 
 ## Atualizações automáticas (com assinatura digital)
 Só o computador servidor precisa ser atualizado: quem acessa pelo navegador já vê a versão nova.
@@ -32,6 +32,14 @@ Só o computador servidor precisa ser atualizado: quem acessa pelo navegador já
 1. Aumente `VERSAO` em `tst_gestao/versao.py` (ex.: `2.1.0` → `2.1.1`).
 2. Rode `publicar_atualizacao.bat "O que mudou nesta versão"`. Ele gera o `.exe`, assina e publica no repositório **público** de versões `Jhonatan2702/tst-gestao-atualizacoes` (só os executáveis, sem código-fonte nem dados).
 3. A publicação automática usa um token do GitHub em `chaves\github_token.txt`. Sem token, o script mostra o passo a passo para publicar pela página do GitHub.
+
+## Avisos da sincronização (pop-up e sino)
+A cada sincronização bem-sucedida, `notificacoes.py` compara a situação com a sincronização anterior e grava **só o que mudou**:
+- 🔴 **Crítico** (fica na tela até fechar): óbitos registrados; bairros com paciente de terapia indicada e nenhum profissional em 180 dias; falha na sincronização (só administrador).
+- 🟠 **Atenção:** novos pacientes com terapia pendente; relatórios que passaram de 60 dias; orçamentos que venceram (só gestor e administrador).
+- 🔵 **Informação:** novas admissões (destacando quem tem terapia indicada); altas; campos novos na URL (só administrador).
+
+Aparecem como pop-up no canto (no máximo 3, os mais graves primeiro) e ficam guardados no **sino** do menu, com contador de não lidos. A primeira sincronização só registra a situação, para não avisar sobre o passado.
 
 ## Ajuda dentro do sistema
 - **Tour de boas-vindas:** abre sozinho no primeiro acesso de cada usuário e mostra menu, atualização dos dados, filtro de período, abas e como abrir as listas de pacientes.
@@ -51,6 +59,7 @@ Os níveis da versão anterior (Consulta e Operador) são convertidos automatica
 Organizado em abas; todo número é clicável e abre a lista de pacientes que o compõe (com busca e exportação CSV).
 
 - **Visão geral:** pacientes ativos, monitoramento com terapias, mortalidade, pacientes com terapia pendente, admissões e altas, visitas, ativos sem visita, relatórios pendentes e **orçamentos vencidos**; situação dos orçamentos dos atendimentos ativos; séries mensais de visitas e de admissões, altas e óbitos.
+- **Resumo do profissional e do paciente:** busca rápida no topo dos painéis, ou clique no nome em qualquer lista. O do profissional traz visitas, pacientes, dias, bairros, zonas, pacientes pendentes, relatórios e evolução mensal. O do paciente traz dados, situação de cada terapia, atendimentos e orçamentos, profissionais, histórico de visitas, relatórios e evolução mensal. Links diretos: `?profissional=Nome` e `?paciente=Nome`.
 - **Ficha do bairro:** clicar num bairro (mapa, rankings, tabelas de abrangência) abre zonas, profissionais, pacientes com terapias e pendências, relatórios e operadoras do bairro, descendo até o histórico de cada paciente. Link direto: `/painel?bairro=Meireles#mapa`.
 - **Mapa por bairro:** mapa de Fortaleza pintado pelo indicador escolhido (pacientes ativos, em terapia, terapia pendente, visitas, profissionais, relatórios pendentes), com filtro por terapia, destaque de uma zona de atendimento e ranking de bairros e de zonas.
 - **Terapias:** número de pacientes por terapia (Fisio, Fono, TO, Nutri, Psico), pacientes com terapia pendente por terapia e visitas do período por terapia.
@@ -63,13 +72,15 @@ Organizado em abas; todo número é clicável e abre a lista de pacientes que o 
 - **Atendimento:** episódio enviado pela URL (id da admissão). **Paciente:** pessoa distinta, identificada pelo nome normalizado (sem acento, maiúsculas e espaços extras), porque a URL não envia CPF ou código. Homônimos são contados como uma pessoa.
 - **Ativo na data:** atendimento admitido até a data e sem alta até ela; sem data de alta, vale o status da URL.
 - **Terapia:** especialidade da visita (Fisioterapia → FISIO, Fonoaudiologia → FONO, Terapeuta Ocupacional → TO, Nutricionista → NUTRI, Psicólogo → PSICO).
-- **Pacientes por terapia:** pacientes ativos com ao menos uma visita da terapia nos **últimos 90 dias** até a data final.
+- **Pacientes por terapia:** pacientes ativos com ao menos uma visita da terapia nos **últimos 90 dias** até a data final, contando só visitas de atendimentos **ativos**: a alta encerra o ciclo, e visitas de um atendimento encerrado não geram pendência, mesmo se o paciente for readmitido.
 - **Complexidade:** quantidade de terapias diferentes que o paciente ativo recebeu nos últimos 90 dias.
 - **Terapia pendente:** paciente ativo indicado com terapias (`possuiterapias = SIM`) que fez a terapia nos últimos 90 dias, mas está há mais de **15 dias** sem visita dela. Também conta quem é indicado com terapias e não teve nenhuma visita de terapia em 90 dias.
 - **Monitoramento com terapias:** pacientes ativos no serviço *Monitoramento* com `possuiterapias = SIM`.
 - **Mortalidade:** pacientes que foram a óbito no período (condição de alta “Óbito”) ÷ pacientes atendidos no período (admitidos até o fim e sem alta antes do início) × 100.
 - **Altas:** não incluem óbitos, que são contados à parte.
 - **Bairro:** convertido para o nome oficial dos 121 bairros de Fortaleza (erros de digitação, abreviações e nomes antigos estão em `ALIAS_BAIRRO`, em `fonte.py`). Bairros de outras cidades ficam como vieram.
+- **Cobertura de um bairro ou zona:** “Atendendo no período” = profissional com visita lá dentro do período. “Cobre o bairro/zona” = atendeu alguém lá nos **últimos 180 dias** (`JANELA_COBERTURA`, em `fonte.py`), mesmo sem visita agora. No mapa de cobertura, contorno **laranja** = descoberto no período mas com quem cubra; **vermelho** = ninguém em 180 dias.
+- **Altas por bairro e por profissional:** atendimentos com data de alta no período (sem óbitos), pelo bairro do atendimento; na ficha do profissional, as altas dos pacientes que ele atendeu nos últimos 180 dias.
 - **Zona de atendimento:** campo `zoneamento` da URL (id, nome e bairros). Pacientes contam pela zona do atendimento mais recente que tenha zona.
 - **Orçamento:** situação do orçamento de cada atendimento ativo na data final: vencido (fim antes da data), vence em até 7 dias, em 8 a 30 dias, vigente por mais de 30 dias ou sem orçamento.
 
@@ -104,8 +115,31 @@ Preços por empresa, tipo de ficha ou relatório realizado, situação detalhada
 - A URL é configurada na própria tela (fica em `dados\config.json`) ou pela variável `TST_DADOSBI_URL`. A URL atual usa **HTTP sem criptografia**: solicite HTTPS à equipe de dados.
 - Registros que deixam de vir na resposta não são apagados, para que uma resposta parcial não esvazie os painéis.
 
+## Hospedagem no Render (site) com banco no Neon
+O mesmo código também roda como site. O executável continua igual, com SQLite. No servidor, o sistema usa PostgreSQL (Neon gratuito) **sempre que a variável `DATABASE_URL` existir**, porque o disco do Render gratuito é apagado a cada reinício e os usuários se perderiam.
+
+| Arquivo | Para quê |
+|---|---|
+| `wsgi.py` | entrada do servidor (`gunicorn wsgi:app`): sem janela, sem bandeja e sem atualizador (a versão nova chega pelo deploy) |
+| `requirements-servidor.txt` | dependências do servidor (Flask, psycopg, gunicorn) |
+| `render.yaml` | configuração do serviço no Render (plano gratuito, região Virginia, 1 worker) |
+
+Variáveis de ambiente no Render:
+
+| Variável | Valor |
+|---|---|
+| `DATABASE_URL` | connection string do Neon (`postgresql://...`) |
+| `TST_ADMIN_SENHA` | senha do **primeiro** login do `admin` (troca obrigatória no 1º acesso). Sem ela o site não sobe: no servidor nunca existe admin/admin |
+| `TST_DADOSBI_URL` | URL da Saúde Residence (no servidor ela vem daqui, não da tela de Integração) |
+| `SECRET_KEY` | gerada pelo Render; mantém as sessões abertas entre reinícios |
+| `TST_HOSPEDADO` | `1`: cookies só por HTTPS, atrás do proxy do Render |
+
+- **Um worker só:** a sincronização de hora em hora roda dentro do processo, e cada worker a mais repetiria a rotina.
+- **Plano gratuito dorme:** depois de cerca de 15 minutos sem acesso, o Render desliga o site, e a sincronização de hora em hora para. Um serviço como o cron-job.org chamando `/saude` a cada 10 minutos mantém o site acordado. A rota `/saude` não abre o banco, então o Neon continua livre para dormir.
+- **Testar no Postgres localmente:** defina `DATABASE_URL` e `TST_ADMIN_SENHA` e rode o pytest. Os mesmos testes valem para os dois bancos.
+
 ## Backup
-O banco fica em `dados\tst_gestao.db`. Como o espelho é refeito pela URL, o essencial no backup é a tabela de usuários: copie o arquivo com o aplicativo fechado.
+No executável, o banco fica em `dados\tst_gestao.db`. Como o espelho é refeito pela URL, o essencial no backup é a tabela de usuários: copie o arquivo com o aplicativo fechado.
 
 ## Estrutura do código
 ```
@@ -117,7 +151,8 @@ tst_gestao/
   fonte.py               leitura do espelho (com cache) e regras comuns (paciente, ativo, terapia)
   painel.py              cálculos do Painel BI e detalhamentos
   operacional.py         cálculos do Painel operacional
-  banco.py, db.py        SQLite, estrutura e inicialização (inclui a limpeza das tabelas da versão 1)
+  banco.py, db.py        SQLite (executável) ou PostgreSQL (DATABASE_URL), estrutura e inicialização
+wsgi.py                  entrada do servidor na hospedagem (Render)
   rotas/                 auth.py · paineis.py · admin.py
   templates/, static/    telas; app.css é o sistema de design (tokens → componentes → páginas)
 tests/                   pytest com uma URL simulada (cenário controlado)

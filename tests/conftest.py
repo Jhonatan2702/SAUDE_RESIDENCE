@@ -72,7 +72,8 @@ def url_falsa(monkeypatch):
 def app():
     a = create_app()
     with connect() as conn:
-        for tabela in ("dadosbi_atendimentos", "dadosbi_visitas_origem", "dadosbi_status", "dadosbi_monitor", "dadosbi_alertas"):
+        for tabela in ("dadosbi_atendimentos", "dadosbi_visitas_origem", "dadosbi_status", "dadosbi_monitor", "dadosbi_alertas",
+                       "notificacoes", "notificacoes_estado"):
             conn.execute(f"DELETE FROM {tabela}")
     return a
 

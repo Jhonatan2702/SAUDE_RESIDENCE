@@ -9,6 +9,7 @@ Registros que somem da resposta não são apagados (proteção contra respostas 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import urllib.request
@@ -327,6 +328,7 @@ def _sincronizar() -> dict:
             "alertas_esquema": len(alertas), "erro": f"{erros} registro(s) inválido(s) ignorado(s)." if erros else None,
         }
         _salvar_status(resultado)
+        _avisar(lambda n: (n.processar(), n.formato_alterado(len(alertas)) if alertas else None))
         return resultado
     except Exception as exc:
         if isinstance(exc, SemUrl):
@@ -343,7 +345,17 @@ def _sincronizar() -> dict:
         _salvar_status({"ultima_execucao": agora, "ultima_sucesso": anterior.get("ultima_sucesso"), "status": "erro",
                         "atendimentos_criados": 0, "atendimentos_atualizados": 0, "visitas_criadas": 0,
                         "visitas_atualizadas": 0, "erro": erro})
+        _avisar(lambda n: n.falha_sincronizacao(erro))
         raise RuntimeError(erro) from exc
+
+
+def _avisar(acao) -> None:
+    """Gera os avisos na tela; um erro aqui nunca pode atrapalhar a sincronização."""
+    try:
+        from . import notificacoes
+        acao(notificacoes)
+    except Exception:
+        logging.getLogger(__name__).exception("Falha ao gerar avisos da sincronização.")
 
 
 def sincronizar() -> dict:

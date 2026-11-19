@@ -54,7 +54,7 @@ const MapaFortaleza = (() => {
     }
 
     /* dados: {bairro: número}; opções: rampa, alerta (bairros com contorno de atenção) */
-    async function desenhar(dados, {rampa = 'azul', alerta = new Set(), destaque = new Set()} = {}) {
+    async function desenhar(dados, {rampa = 'azul', alerta = new Set(), atencao = new Set(), destaque = new Set(), rotuloDestaque = 'bairros da zona'} = {}) {
       await preparar();
       valores = new Map(Object.entries(dados).map(([b, v]) => [norm(b), v]));
       const cores = RAMPAS[rampa];
@@ -71,6 +71,7 @@ const MapaFortaleza = (() => {
         noMapa.add(p.dataset.bairro);
         p.setAttribute('fill', v > 0 ? paleta[faixa(v)] : VAZIO);
         p.classList.toggle('alerta', alerta.has(p.dataset.bairro));
+        p.classList.toggle('atencao', atencao.has(p.dataset.bairro));
         p.classList.toggle('destaque', destaque.has(p.dataset.bairro));
         p.classList.toggle('com-dado', v > 0);
       });
@@ -79,8 +80,9 @@ const MapaFortaleza = (() => {
           const a = i * tam + 1, b = Math.min(max, (i + 1) * tam);
           return `<span><i style="background:${c}"></i>${a === b ? fmt(a) : `${fmt(a)}–${fmt(b)}`}</span>`;
         }).join('') + `<span><i style="background:${VAZIO}"></i>nenhum</span>` +
-          (alerta.size ? '<span><i class="leg-alerta"></i>atenção</span>' : '') +
-          (destaque.size ? '<span><i class="leg-destaque"></i>bairros da zona</span>' : '') : '<span class="muted">Sem dados para este filtro.</span>';
+          (atencao.size ? '<span><i class="leg-atencao"></i>descoberto no período, mas coberto</span>' : '') +
+          (alerta.size ? `<span><i class="leg-alerta"></i>${atencao.size ? 'sem nenhum profissional' : 'atenção'}</span>` : '') +
+          (destaque.size ? `<span><i class="leg-destaque"></i>${esc(rotuloDestaque)}</span>` : '') : '<span class="muted">Sem dados para este filtro.</span>';
       }
       // bairros dos dados que não existem no mapa (grafia diferente da base cartográfica)
       return [...valores.entries()].filter(([b, v]) => v > 0 && !noMapa.has(b)).map(([b]) => b);

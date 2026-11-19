@@ -102,3 +102,13 @@ def test_sem_url_configurada_avisa(app, monkeypatch):
     with pytest.raises(RuntimeError):
         espelho.sincronizar()
     assert "não foi configurada" in espelho.status()["erro"]
+
+
+def test_campo_da_url_fica_fixo_quando_configurado(admin, monkeypatch):
+    monkeypatch.delenv("TST_DADOSBI_URL")
+    monkeypatch.setattr(config, "ler", lambda: {})
+    html = admin.get("/integracao").get_data(as_text=True)
+    assert "url-alterar" not in html and "ainda não foi configurada" in html  # sem URL: campo livre para preencher
+    monkeypatch.setattr(config, "ler", lambda: {"url_dadosbi": "https://dados.cliente/api"})
+    html = admin.get("/integracao").get_data(as_text=True)
+    assert 'value="https://dados.cliente/api"' in html and "readonly" in html and "Alterar endereço" in html

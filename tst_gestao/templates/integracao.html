@@ -22,8 +22,13 @@
   <div class="card"><div class="card-cab"><h2>Endereço da URL</h2><small>guardado só neste computador</small></div>
     <p class="card-desc">Endereço fornecido pela equipe de dados da Saúde Residence. Ele fica na pasta <code>dados</code> deste computador e não vai dentro do programa nem nas atualizações.</p>
     {% if url_por_ambiente %}<p class="card-desc">Definido pela variável de ambiente <code>TST_DADOSBI_URL</code>: para trocar aqui, remova a variável.</p>{% endif %}
-    <form id="f-url" class="inline-form"><input id="url-dados" type="url" value="{{ url }}" placeholder="http://…/dadosbi/lista/dadospaciente" required{% if url_por_ambiente %} disabled{% endif %}>
-      <button class="btn primario" type="submit"{% if url_por_ambiente %} disabled{% endif %}>Salvar e sincronizar</button></form>
+    {# já configurada: campo fixo (somente leitura); "Alterar endereço" libera a edição manual #}
+    <form id="f-url" class="inline-form"><input id="url-dados" type="url" value="{{ url }}" placeholder="http://…/dadosbi/lista/dadospaciente" required
+        {%- if url or url_por_ambiente %} readonly{% endif %}{% if url_por_ambiente %} disabled{% endif %}>
+      {% if url and not url_por_ambiente %}<button class="btn" type="button" id="url-alterar">Alterar endereço</button>{% endif %}
+      <button class="btn primario" type="submit" id="url-salvar"{% if url %} hidden{% endif %}{% if url_por_ambiente %} disabled{% endif %}>Salvar e sincronizar</button>
+      {% if url and not url_por_ambiente %}<button class="btn" type="button" id="url-cancelar" hidden>Cancelar</button>{% endif %}</form>
+    {% if url %}<p class="card-desc" style="margin-top:10px"><span class="tag ok">Configurada</span> O endereço fica fixo. Use “Alterar endereço” só se a equipe de dados informar um novo.</p>{% endif %}
   </div>
 </div>
 

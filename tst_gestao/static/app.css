@@ -241,6 +241,8 @@ td.forte{font-weight:600}
 .mapa-svg path{stroke:#fff;stroke-width:.25;cursor:pointer;transition:fill .25s}
 .mapa-svg path:hover{stroke:var(--tx);stroke-width:.6}
 .mapa-svg path.alerta{stroke:var(--crit);stroke-width:.7;stroke-dasharray:1.2 .8}
+.mapa-svg path.atencao{stroke:var(--warn);stroke-width:.7;stroke-dasharray:1.2 .8}
+.mapa-leg i.leg-atencao{background:#fff;border:1.5px dashed var(--warn)}
 .mapa-svg path.sel{stroke:var(--tx);stroke-width:1}
 .mapa-svg path.destaque{stroke:#0f1a2a;stroke-width:.9}
 .mapa-leg i.leg-destaque{background:#fff;border:2px solid #0f1a2a}
@@ -260,6 +262,37 @@ td.forte{font-weight:600}
 .bairro-info dt.on,.bairro-info dt.on+dd{color:var(--acc-2)}
 .mapa-lado{display:flex;flex-direction:column;gap:16px;min-width:0}
 
+/* avisos da sincronização: sino no menu, painel e pop-ups */
+.sino-wrap{position:relative;margin:0 14px 10px}
+.sino{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--menu-line);background:none;
+  color:var(--menu-tx);font:inherit;font-size:13.5px;font-weight:500;cursor:pointer}
+.sino:hover{background:var(--menu-2);color:#fff}
+.sino .tx{flex:1;text-align:left}
+.sino-n{min-width:20px;padding:0 6px;border-radius:99px;background:var(--menu-line);color:var(--menu-mut);font-size:11.5px;font-weight:700;text-align:center}
+.sino.tem{border-color:#c4362f88}.sino.tem .ic{color:#ff8a80}.sino.tem .sino-n{background:var(--crit);color:#fff}
+.notif-painel{position:fixed;left:calc(var(--menu-w) + 10px);bottom:20px;z-index:320;width:min(420px,90vw);max-height:70vh;overflow:auto;
+  background:var(--surface);color:var(--tx);border:1px solid var(--line);border-radius:var(--r);box-shadow:0 20px 50px #0f1a2a40}
+.notif-cab{position:sticky;top:0;background:var(--surface);padding:12px 14px;border-bottom:1px solid var(--line);display:flex;flex-direction:column}
+.notif-cab small{color:var(--mut);font-size:12px}
+.notif-item{display:flex;gap:10px;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line-2);background:none;padding:10px 14px;cursor:pointer;font:inherit;color:inherit}
+.notif-item:hover{background:var(--surface-2)}.notif-item.novo{background:#f5f9fe}
+.notif-pilha{position:fixed;right:20px;bottom:76px;z-index:330;display:flex;flex-direction:column;gap:10px;width:min(380px,92vw)}
+.notif{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--tom);border-radius:10px;
+  padding:12px 12px 12px 14px;box-shadow:0 14px 34px #0f1a2a33;animation:notifEntra .25s ease-out;transition:opacity .25s,transform .25s}
+.notif.saindo{opacity:0;transform:translateX(20px)}
+@keyframes notifEntra{from{opacity:0;transform:translateY(10px)}}
+.g-crit{--tom:var(--crit)}.g-warn{--tom:var(--warn)}.g-info{--tom:var(--acc)}
+.notif-resto{align-self:flex-end;border:1px solid var(--line);background:var(--surface);color:var(--acc-2);font:inherit;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:99px;cursor:pointer;box-shadow:0 6px 16px #0f1a2a1f}
+.notif-ic{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;flex:none;background:color-mix(in srgb,var(--tom) 14%,#fff);color:var(--tom)}
+.notif-corpo{flex:1;min-width:0}
+.notif-corpo b{display:block;font-size:14px;line-height:1.3}
+.notif-corpo p{margin:3px 0 0;font-size:12.5px;color:var(--tx2);line-height:1.45}
+.notif-rot{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--tom)}
+.notif-acoes{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.notif-x{border:0;background:none;font-size:20px;line-height:1;color:var(--mut);cursor:pointer;padding:0 2px}
+@media(max-width:1000px){.sino-wrap{margin:0 6px}.sino .tx{display:none}.notif-painel{left:10px;bottom:auto;top:60px}}
+@media print{.notif-pilha,.sino-wrap,.notif-painel{display:none!important}}
+
 /* aviso de nova versão e atualizações */
 .aviso-versao{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 0;padding:10px 14px;border-radius:var(--r-sm);
   background:var(--acc-cl);border:1px solid #c6dbf5;color:#16457f;font-size:13.5px}
@@ -275,7 +308,7 @@ dialog.ficha{padding:20px 22px}
 .fb-cab .trilha{font-size:12px;color:var(--mut);font-weight:600}
 .fb-cab h3{font-size:22px;margin:2px 0 6px}
 .fb-zonas{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px}
-.fb-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.fb-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin-bottom:12px}
 .fb-k{display:flex;flex-direction:column;align-items:flex-start;gap:1px;background:var(--surface);border:1px solid var(--line);border-top:3px solid var(--tom);
   border-radius:var(--r-sm);padding:9px 12px;font:inherit;color:inherit;cursor:pointer;text-align:left}
 .fb-k:hover{border-color:#bcd2ee}
@@ -285,6 +318,19 @@ dialog.ficha{padding:20px 22px}
 .fb-sig{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--c);margin-right:8px}
 @media(max-width:900px){.fb-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .bairro-info .btn{margin-top:12px}
+.fx-dados{display:grid;grid-template-columns:minmax(180px,280px) minmax(0,1fr);margin:0}
+.fx-dados dt,.fx-dados dd{margin:0;padding:8px 0;border-bottom:1px solid var(--line-2);font-size:13.5px}
+.fx-dados dt{color:var(--tx2);font-weight:600;padding-right:14px}
+#fx-corpo .barra-tab{padding:0 0 10px;border:0}
+.busca-global{position:relative;width:min(300px,100%)}
+.busca-resultados{position:absolute;z-index:60;top:calc(100% + 4px);left:0;width:min(420px,92vw);max-height:60vh;overflow:auto;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:0 14px 34px #0f1a2a2e;padding:6px}
+.busca-resultados b{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);padding:8px 8px 4px}
+.busca-resultados button{display:flex;flex-direction:column;align-items:flex-start;width:100%;border:0;background:none;text-align:left;padding:7px 8px;border-radius:6px;cursor:pointer;font:inherit}
+.busca-resultados button:hover,.busca-resultados button.on{background:var(--acc-cl)}
+.busca-resultados button span{font-size:13.5px;font-weight:600}.busca-resultados button small{font-size:12px;color:var(--mut)}
+.busca-resultados p{margin:8px;font-size:13px}
+@media(max-width:900px){.fx-dados{grid-template-columns:minmax(0,1fr)}.fx-dados dt{border:0;padding-bottom:0}}
 
 /* tour guiado e ajuda */
 .ajuda-bts{display:flex;gap:6px}

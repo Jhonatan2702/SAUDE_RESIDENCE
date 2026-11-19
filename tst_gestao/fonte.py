@@ -20,6 +20,7 @@ from .db import connect
 
 JANELA_TERAPIA = 90   # dias que definem "paciente em terapia" e a complexidade
 JANELA_ATRASO = 15    # dias sem visita de uma terapia em andamento = pendente
+JANELA_COBERTURA = 180  # profissional "cobre" um bairro se visitou alguém lá nesses dias (mesmo sem visita no período)
 FAIXAS_IDADE = [("0-17", 0, 17), ("18-39", 18, 39), ("40-59", 40, 59), ("60-79", 60, 79), ("80+", 80, 130)]
 TERAPIAS = ["FISIO", "FONO", "TO", "NUTRI", "PSICO"]
 NOMES_TERAPIA = {"FISIO": "Fisioterapia", "FONO": "Fonoaudiologia", "TO": "Terapia ocupacional",
@@ -177,12 +178,16 @@ class Base:
     def visitas_entre(self, ini: date, fim: date) -> list[dict]:
         return [v for v in self.visitas if ini <= v["_data"] <= fim]
 
-    def terapias_por_paciente(self, fim: date, dias: int = JANELA_TERAPIA) -> dict[str, dict[str, date]]:
-        """{paciente: {terapia: data da última visita}} nos `dias` até `fim`."""
+    def terapias_por_paciente(self, fim: date, dias: int = JANELA_TERAPIA, so_atendimentos: set[str] | None = None) -> dict[str, dict[str, date]]:
+        """{paciente: {terapia: data da última visita}} nos `dias` até `fim`.
+
+        `so_atendimentos`: considera só as visitas desses atendimentos (ex.: os ativos). Assim a alta encerra o ciclo:
+        visitas de um atendimento que já recebeu alta não contam para "em terapia" nem para pendência.
+        """
         ini = fim - timedelta(days=dias - 1)
         saida: dict[str, dict[str, date]] = {}
         for v in self.visitas:
-            if ini <= v["_data"] <= fim:
+            if ini <= v["_data"] <= fim and (so_atendimentos is None or v["atendimento_origem_id"] in so_atendimentos):
                 a = self.por_id.get(v["atendimento_origem_id"])
                 if not a:
                     continue
@@ -233,9 +238,9 @@ def carregar() -> Base:
         atend = [dict(r) for r in conn.execute(
             "SELECT origem_id, nome_paciente, operadora, servico, status_origem, data_admissao, data_alta, condicao_alta, "
             "possui_terapias, idade, diagnostico, complexidade, cidade, bairro, relatorios_pendentes_json, "
-            "inicio_orcamento, fim_orcamento, zona_id, zona_nome, zona_bairros FROM dadosbi_atendimentos")]
+            "inicio_orcamento, fim_orcamento, zona_id, zona_nome, zona_bairros FROM dadosbi_atendimentos ORDER BY id")]
         visitas = [dict(r) for r in conn.execute(
-            "SELECT atendimento_origem_id, profissional_id, profissional, especialidade, data_visita FROM dadosbi_visitas_origem")]
+            "SELECT atendimento_origem_id, profissional_id, profissional, especialidade, data_visita FROM dadosbi_visitas_origem ORDER BY id")]
     for a in atend:
         a["_adm"], a["_alta"] = data(a["data_admissao"]), data(a["data_alta"])
         a["_pac"] = chave_paciente(a["nome_paciente"])

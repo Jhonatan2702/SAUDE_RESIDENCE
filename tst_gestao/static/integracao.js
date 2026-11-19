@@ -95,12 +95,24 @@
     try { desenhar(await api('/api/atualizacao/verificar', 'POST')); } catch (err) { toast(err.message, true); }
     finally { b.disabled = false; b.textContent = 'Buscar atualizações'; }
   };
+  // endereço fixo: só fica editável depois de "Alterar endereço"; "Cancelar" volta ao valor salvo
+  const campoUrl = $('url-dados'), urlSalva = campoUrl.value;
+  const editarUrl = sim => {
+    campoUrl.readOnly = !sim;
+    $('url-salvar').hidden = !sim;
+    if ($('url-alterar')) $('url-alterar').hidden = sim;
+    if ($('url-cancelar')) $('url-cancelar').hidden = !sim;
+    if (sim) { campoUrl.focus(); campoUrl.select(); } else campoUrl.value = urlSalva;
+  };
+  if ($('url-alterar')) $('url-alterar').onclick = () => editarUrl(true);
+  if ($('url-cancelar')) $('url-cancelar').onclick = () => editarUrl(false);
   $('f-url').onsubmit = async e => {
     e.preventDefault();
     try {
-      await api('/api/integracao/url', 'POST', {url: $('url-dados').value});
+      await api('/api/integracao/url', 'POST', {url: campoUrl.value});
       toast('URL salva. Sincronizando…');
       $('sync').click();
+      setTimeout(() => location.reload(), 1500);  // volta a mostrar o campo fixo com o novo endereço
     } catch (err) { toast(err.message, true); }
   };
   api('/api/atualizacao').then(desenhar).catch(err => { $('atu-estado').textContent = err.message; });
