@@ -35,7 +35,9 @@ def create_app() -> Flask:
     @app.get("/saude", endpoint="saude")
     def saude():
         """Verificação de vida para o Render e para o serviço que mantém o site acordado (não abre o banco)."""
-        return {"ok": True, "versao": versao.VERSAO}
+        from datetime import datetime
+
+        return {"ok": True, "versao": versao.VERSAO, "hora": datetime.now().isoformat(timespec="minutes")}
 
     app.before_request(proteger)
     for bp in (auth.bp, paineis.bp, admin.bp):
