@@ -13,7 +13,6 @@ from __future__ import annotations
 import os
 import sqlite3
 import sys
-import threading
 from pathlib import Path
 
 BASE_DIR = (
@@ -123,21 +122,21 @@ def _sql_pg(sql: str) -> str:
 
 
 class Conexao:
-    """Conexão usada com `with`: confirma ao sair sem erro, desfaz em caso de erro e fecha (ou devolve ao pool)."""
+    """Conexão usada com `with`: confirma ao sair sem erro, desfaz em caso de erro e fecha."""
 
     dual = ""  # mantém compatível o SQL que seleciona sem FROM
 
-    def __init__(self, raw, pool=None):
+    def __init__(self, raw, pg: bool = False):
         self.raw = raw
-        self._pool = pool
+        self._pg = pg
 
     def execute(self, sql: str, params=()):
-        if self._pool is None:
+        if not self._pg:
             return self.raw.execute(sql, params)
         return self.raw.execute(_sql_pg(sql), params) if params else self.raw.execute(sql)
 
     def executemany(self, sql: str, linhas):
-        if self._pool is None:
+        if not self._pg:
             return self.raw.executemany(sql, linhas)
         with self.raw.cursor() as cur:
             cur.executemany(_sql_pg(sql), list(linhas))
@@ -149,10 +148,7 @@ class Conexao:
         self.raw.rollback()
 
     def close(self):
-        if self._pool is None:
-            self.raw.close()
-        else:
-            self._pool.putconn(self.raw)
+        self.raw.close()
 
     def __enter__(self):
         return self
@@ -164,31 +160,24 @@ class Conexao:
             self.close()
 
 
-_pool = None
-_trava_pool = threading.Lock()
+def _conectar_pg():
+    """Uma conexão nova por operação, fechada ao final (sem pool).
 
+    O Neon gratuito desliga quando ocioso e derruba conexões paradas; abrir na hora evita conexões
+    "mortas" guardadas e deixa o banco dormir. Na mesma região do Render, conectar leva poucos ms.
+    Keepalives + timeouts: uma rede travada vira erro em segundos, nunca uma espera sem fim.
+    """
+    import psycopg
 
-def _pool_pg():
-    """Pool de conexões com o Postgres (o Neon desliga quando ocioso: a conexão é testada antes de usar)."""
-    global _pool
-    with _trava_pool:
-        if _pool is None:
-            from psycopg_pool import ConnectionPool
-
-            _pool = ConnectionPool(
-                DATABASE_URL, min_size=0, max_size=int(os.environ.get("TST_DB_POOL", "5")), open=True,
-                max_idle=120,  # fecha conexões paradas: o Neon gratuito só "dorme" (e economiza horas) sem conexões abertas
-                check=ConnectionPool.check_connection,
-                # prepare_threshold=None: compatível com o endereço "-pooler" do Neon (PgBouncer)
-                kwargs={"row_factory": _fabrica_linhas, "prepare_threshold": None, "connect_timeout": 15},
-            )
-        return _pool
+    return psycopg.connect(
+        DATABASE_URL, row_factory=_fabrica_linhas, prepare_threshold=None,  # compatível com o "-pooler" do Neon
+        connect_timeout=15, keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3,
+    )
 
 
 def conectar() -> Conexao:
     if POSTGRES:
-        pool = _pool_pg()
-        return Conexao(pool.getconn(timeout=30), pool)
+        return Conexao(_conectar_pg(), pg=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     raw = sqlite3.connect(DB_PATH, timeout=15)
     raw.row_factory = sqlite3.Row
