@@ -22,7 +22,7 @@ def usuarios():
 @exige("admin")
 def api_usuarios():
     with connect() as conn:
-        rows = conn.execute("SELECT id, usuario, nome, nivel, ativo FROM usuarios ORDER BY LOWER(nome)")
+        rows = conn.execute("SELECT id, usuario, nome, nivel, ativo, ultimo_acesso FROM usuarios ORDER BY LOWER(nome)")
         return jsonify([dict(r) for r in rows])
 
 

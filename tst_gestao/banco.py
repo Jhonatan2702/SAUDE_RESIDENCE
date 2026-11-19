@@ -41,7 +41,8 @@ TABELAS: dict[str, str] = {
         senha_hash TEXT NOT NULL,
         nivel TEXT NOT NULL DEFAULT 'operacional',
         ativo INTEGER NOT NULL DEFAULT 1,
-        trocar_senha INTEGER NOT NULL DEFAULT 0""",
+        trocar_senha INTEGER NOT NULL DEFAULT 0,
+        ultimo_acesso TEXT""",
     "dadosbi_atendimentos": """
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         origem_id TEXT NOT NULL UNIQUE,

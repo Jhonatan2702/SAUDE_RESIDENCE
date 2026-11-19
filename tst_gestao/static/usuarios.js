@@ -5,10 +5,11 @@
 
   async function carregar() {
     usuarios = await api('/api/usuarios');
-    $('t-usuarios').innerHTML = '<thead><tr><th>Usuário</th><th>Nome</th><th>Perfil</th><th>Situação</th><th></th></tr></thead><tbody>' +
+    $('t-usuarios').innerHTML = '<thead><tr><th>Usuário</th><th>Nome</th><th>Perfil</th><th>Situação</th><th>Último acesso</th><th></th></tr></thead><tbody>' +
       usuarios.map(u => `<tr><td class="forte">${esc(u.usuario)}</td><td>${esc(u.nome)}</td>` +
         `<td><span class="tag ${u.nivel === 'admin' ? 'acc' : ''}">${esc(rotulo(u.nivel))}</span></td>` +
         `<td>${u.ativo ? '<span class="tag ok">Ativo</span>' : '<span class="tag">Inativo</span>'}</td>` +
+        `<td class="muted">${u.ultimo_acesso ? fmtData(u.ultimo_acesso) + ' às ' + u.ultimo_acesso.slice(11, 16) : 'nunca acessou'}</td>` +
         `<td class="num"><button class="btn sm" data-editar="${u.id}">Editar</button> <button class="btn sm perigo" data-excluir="${u.id}">Excluir</button></td></tr>`).join('') +
       '</tbody>';
   }

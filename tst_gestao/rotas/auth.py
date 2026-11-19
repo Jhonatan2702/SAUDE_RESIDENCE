@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import secrets
+from datetime import datetime
 
 from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -20,6 +21,9 @@ def login():
             u = conn.execute("SELECT * FROM usuarios WHERE LOWER(usuario) = LOWER(?) AND ativo = 1",
                              (request.form.get("usuario", "").strip(),)).fetchone()
         if u and check_password_hash(u["senha_hash"], request.form.get("senha", "")):
+            with connect() as conn:
+                conn.execute("UPDATE usuarios SET ultimo_acesso = ? WHERE id = ?",
+                             (datetime.now().isoformat(timespec="seconds"), u["id"]))
             session.clear()
             session["uid"] = u["id"]
             session["csrf"] = secrets.token_hex(16)
