@@ -38,7 +38,13 @@
   {% if usuario %}
   <div class="sino-wrap">
     <button type="button" class="sino" id="sino" aria-label="Avisos da sincronização"><svg class="ic"><use href="#i-aviso"/></svg><span class="tx">Avisos</span><span class="sino-n">0</span></button>
-    <div class="notif-painel" id="notif-painel" hidden><div class="notif-cab"><b>Avisos da sincronização</b><small>o que mudou e pede atenção</small></div><div class="notif-lista"></div></div>
+    <div class="notif-painel" id="notif-painel" role="dialog" aria-label="Avisos da sincronização" hidden>
+      <div class="notif-cab">
+        <div class="notif-cab-l"><div><b>Avisos da sincronização</b><small>o que mudou e pede atenção</small></div>
+          <button type="button" class="notif-x" data-a="fechar-painel" aria-label="Fechar avisos">×</button></div>
+        <div class="seg notif-filtro" role="tablist"></div>
+      </div>
+      <div class="notif-lista"></div></div>
   </div>
   {% endif %}
   {% if sinc and sinc.ultima_sucesso %}

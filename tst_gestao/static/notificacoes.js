@@ -17,7 +17,10 @@
   const pilha = Object.assign(document.createElement('div'), {className: 'notif-pilha'});
   pilha.setAttribute('aria-live', 'polite');
   document.body.append(pilha);
+  // o painel vai para o <body>: dentro do menu (sticky) ele ficava por baixo dos cards da página
   const painel = document.getElementById('notif-painel');
+  document.body.append(painel);
+  let filtro = '';
 
   const quando = s => { const d = new Date(s); const min = Math.round((Date.now() - d) / 60000);
     return min < 1 ? 'agora' : min < 60 ? `há ${min} min` : min < 1440 ? `há ${Math.round(min / 60)} h` : fmtData(s); };
@@ -81,22 +84,49 @@
     pilha.append(b);
   }
 
-  function desenharPainel() {
-    painel.querySelector('.notif-lista').innerHTML = todas.length ? todas.map(n =>
-      `<button type="button" class="notif-item g-${n.gravidade}${n.id > lido ? ' novo' : ''}" data-id="${n.id}">${html(n)}</button>`).join('')
-      : '<p class="muted" style="padding:12px">Nenhum aviso ainda. Eles aparecem aqui após cada sincronização com a URL.</p>';
+  // agrupa por dia ("Hoje", "Ontem" ou a data), com filtro por gravidade
+  const dia = s => { const d = new Date(s); d.setHours(0, 0, 0, 0); return d; };
+  function rotuloDia(s) {
+    const dias = Math.round((dia(new Date()) - dia(s)) / 86400000);
+    return dias === 0 ? 'Hoje' : dias === 1 ? 'Ontem' : fmtData(s);
   }
+  let novosAoAbrir = 0;
+  function desenharPainel() {
+    const cont = g => todas.filter(n => !g || n.gravidade === g).length;
+    painel.querySelector('.notif-filtro').innerHTML = [['', 'Todos'], ['crit', 'Críticos'], ['warn', 'Atenção'], ['info', 'Informação']]
+      .map(([g, nome]) => `<button type="button" role="tab" data-f="${g}" class="${filtro === g ? 'on' : ''}"${g && !cont(g) ? ' disabled' : ''}>` +
+        `${nome} <span>${cont(g)}</span></button>`).join('');
+    const itens = todas.filter(n => !filtro || n.gravidade === filtro);
+    let ultimoDia = null, out = '';
+    for (const n of itens) {
+      const d = rotuloDia(n.criado_em);
+      if (d !== ultimoDia) { out += `<div class="notif-dia">${esc(d)}</div>`; ultimoDia = d; }
+      out += `<button type="button" class="notif-item g-${n.gravidade}${n.id > novosAoAbrir ? ' novo' : ''}" data-id="${n.id}" title="${esc(n.texto || n.titulo)}">` +
+        html(n) + '<span class="notif-abrir">Abrir →</span></button>';
+    }
+    painel.querySelector('.notif-lista').innerHTML = out ||
+      `<p class="muted notif-vazio">${todas.length ? 'Nenhum aviso deste tipo.' : 'Nenhum aviso ainda. Eles aparecem aqui após cada sincronização com a URL.'}</p>`;
+  }
+  const fecharPainel = () => { painel.hidden = true; sino.setAttribute('aria-expanded', 'false'); };
+  sino.setAttribute('aria-expanded', 'false');
   sino.onclick = e => {
     e.stopPropagation();
-    painel.hidden = !painel.hidden;
-    if (!painel.hidden) { desenharPainel(); marcarLido(todas[0]?.id || 0); }
+    if (!painel.hidden) return fecharPainel();
+    novosAoAbrir = lido;  // destaca o que era novo ao abrir, mesmo já marcando tudo como lido
+    painel.hidden = false; sino.setAttribute('aria-expanded', 'true');
+    pilha.querySelectorAll('.notif, .notif-resto').forEach(el => el.remove());  // o painel já mostra tudo: sem pop-ups repetidos
+    desenharPainel(); marcarLido(todas[0]?.id || 0);
   };
   painel.onclick = e => {
     e.stopPropagation();
+    const f = e.target.closest('[data-f]');
+    if (f) { filtro = f.dataset.f; return desenharPainel(); }
+    if (e.target.closest('[data-a=fechar-painel]')) return fecharPainel();
     const item = e.target.closest('[data-id]');
-    if (item) { painel.hidden = true; abrir(todas.find(n => n.id === +item.dataset.id)?.link || {}); }
+    if (item) { fecharPainel(); abrir(todas.find(n => n.id === +item.dataset.id)?.link || {}); }
   };
-  document.addEventListener('click', () => { painel.hidden = true; });
+  document.addEventListener('click', () => { if (!painel.hidden) fecharPainel(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !painel.hidden) { fecharPainel(); sino.focus(); } });
 
   async function buscar(primeira = false) {
     try {
