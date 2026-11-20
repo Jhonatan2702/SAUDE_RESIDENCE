@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import secrets
+from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import abort, g, jsonify, redirect, request, session, url_for
@@ -10,6 +11,16 @@ from .db import NIVEIS, connect
 
 LIVRES = {"auth.login", "static", "saude"}
 TROCA_SENHA = {"auth.perfil", "auth.logout", "auth.api_senha"}
+INTERVALO_ACESSO = timedelta(minutes=5)  # grava o último acesso no máximo a cada 5 min por usuário
+
+
+def registrar_acesso(u) -> None:
+    """Último acesso = última vez que o usuário usou o sistema, não só o login (a sessão continua aberta entre visitas)."""
+    agora = datetime.now()
+    if u["ultimo_acesso"] and u["ultimo_acesso"] > (agora - INTERVALO_ACESSO).isoformat(timespec="seconds"):
+        return
+    with connect() as conn:
+        conn.execute("UPDATE usuarios SET ultimo_acesso = ? WHERE id = ?", (agora.isoformat(timespec="seconds"), u["id"]))
 
 
 def usuario_atual():
@@ -59,6 +70,7 @@ def proteger():
         if request.path.startswith("/api/"):
             return jsonify(erro="Sessão expirada."), 401
         return redirect(url_for("auth.login"))
+    registrar_acesso(u)
     if u["trocar_senha"] and request.endpoint not in TROCA_SENHA:
         if request.path.startswith("/api/"):
             return jsonify(erro="Defina uma nova senha antes de continuar."), 403

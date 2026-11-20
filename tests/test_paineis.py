@@ -307,3 +307,24 @@ def test_alta_encerra_o_ciclo_de_visitas(admin, app, url_falsa):
     gil = admin.get(f"/api/ficha/paciente?valor=Gil Prado&{P}").get_json()
     ter = {l[0]: l[1] for l in next(a for a in gil["abas"] if a["id"] == "terapias")["linhas"]}
     assert ter["Fisioterapia"] == "Encerrada com a alta de 05/10/2026"
+
+
+def test_ultimo_acesso_registra_quem_ja_estava_logado(admin, criar_usuario):
+    from tst_gestao.db import connect
+    op = criar_usuario("operador7", "operacional")
+    ler = lambda: {u["usuario"]: u["ultimo_acesso"] for u in admin.get("/api/usuarios").get_json()}["operador7"]
+    # sessão aberta antes de a coluna existir: entra direto, sem passar pelo login
+    with connect() as conn:
+        conn.execute("UPDATE usuarios SET ultimo_acesso = NULL WHERE usuario = 'operador7'")
+    assert op.get("/operacional").status_code == 200
+    assert ler()
+    # dentro de 5 minutos não grava de novo (poupa o banco)
+    with connect() as conn:
+        conn.execute("UPDATE usuarios SET ultimo_acesso = '2099-01-01T00:00:00' WHERE usuario = 'operador7'")
+    op.get("/api/operacional/relatorios")
+    assert ler() == "2099-01-01T00:00:00"
+    # acesso antigo é atualizado na próxima página
+    with connect() as conn:
+        conn.execute("UPDATE usuarios SET ultimo_acesso = '2020-01-01T00:00:00' WHERE usuario = 'operador7'")
+    op.get("/api/operacional/relatorios")
+    assert ler() > "2020-01-01T00:00:00"
