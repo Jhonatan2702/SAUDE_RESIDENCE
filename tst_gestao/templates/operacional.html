@@ -12,7 +12,16 @@
 
 {# ------------------------------------------------------------ Relatórios pendentes #}
 <section class="aba" id="aba-relatorios">
-  <div class="alert nota"><svg class="ic"><use href="#i-info"/></svg><span>Lista atual de relatórios pendentes enviada pela URL. Não depende do período: um relatório some daqui quando é entregue no App.</span></div>
+  <div class="filtro-comp">
+    <label for="rel-comp" class="muted">Competência</label>
+    <select id="rel-comp" style="width:auto">
+      <option value="atual">Mês atual</option><option value="anterior">Mês anterior</option><option value="todas">Todas</option>
+    </select>
+    <span class="muted dica">Mês de referência do relatório. Não depende do período: um relatório some daqui quando é entregue no App.</span>
+  </div>
+  <div class="alert warn" id="rel-anteriores" hidden><svg class="ic"><use href="#i-aviso"/></svg>
+    <span><b id="rel-ant-n"></b> de competências anteriores (desde <span id="rel-ant-desde"></span>) continuam pendentes.
+      <a href="#" id="rel-ver-todas">Ver todas</a></span></div>
   <div class="kpis" id="k-rel"></div>
   <div class="grade g3">
     <div class="card">{{ ui.cab('Por terapia') }}<div class="lbar" id="l-rel-ter"></div></div>
@@ -36,6 +45,16 @@
       <p class="card-desc">Clique num profissional para ver os pacientes atendidos por ele no período: atendimento, operadora, bairro, terapias, quantidade de visitas, primeira e última visita.</p>
       <p class="card-desc">Profissionais sem identificador na URL aparecem pelo nome.</p></div>
   </div>
+</section>
+
+{# ------------------------------------------------------------ Operacional do paciente #}
+<section class="aba" id="aba-pacientes">
+  <div class="kpis" id="k-pac"></div>
+  <div class="card flush">{{ ui.cab('Paciente / terapia / profissional', 'Uma linha por paciente, terapia e profissional com visita no período: quantas visitas, a primeira e a última. Clique numa linha para abrir o resumo completo do paciente.', nota_id='pac-nota') }}
+    <div class="barra-tab"><input type="search" class="busca" id="pac-busca" placeholder="Buscar paciente, profissional, operadora, bairro…">
+      <select id="pac-ter" style="width:auto"><option value="">Todas as terapias</option></select>
+      <button type="button" class="btn sm" data-csv="t-pac">Exportar CSV</button><span class="contador" id="pac-n"></span></div>
+    <div class="tabela-wrap"><table id="t-pac"></table></div></div>
 </section>
 
 {# ------------------------------------------------------------ Região de abrangência #}

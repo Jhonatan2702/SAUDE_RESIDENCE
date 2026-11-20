@@ -10,7 +10,7 @@
   const ICONE = {crit: 'aviso', warn: 'pendencia', info: 'info'};
   const ROTULO = {crit: 'Crítico', warn: 'Atenção', info: 'Informação'};
   const ABAS = {painel: ['geral', 'mapa', 'terapias', 'complexidade', 'movimentacao', 'perfil', 'profissionais'],
-                operacional: ['relatorios', 'profissional', 'abrangencia', 'fichas', 'precos']};
+                operacional: ['relatorios', 'profissional', 'pacientes', 'abrangencia', 'fichas', 'precos']};
   let todas = [], lido = 0;
   try { lido = +(localStorage.getItem(CHAVE) || 0); } catch (e) { lido = 0; }
   const mostradas = new Set();

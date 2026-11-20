@@ -10,6 +10,7 @@
     if (tipo === 'ficha') { FichaBairro.abrir(valor); return null; }
     if (tipo === 'profissional') { Ficha.abrir('profissional', valor); return null; }  // resumo completo do profissional
     if (tipo === 'hist') { Ficha.abrir('paciente', valor); return null; }  // resumo completo do paciente
+    if (tipo === 'rel_ver_todas') { trocarComp('todas'); return null; }
     const R = local.rel, F = local.fic;
     const col = {rel_ter: 3, rel_prof: 2, rel_comp: 5, fic_ter: 4, fic_prof: 3}[tipo];
     if (tipo.startsWith('rel_') && R) {
@@ -62,18 +63,33 @@
   const tZonas = Tabela('t-zonas', {numericas: [1, 2, 3, 4, 5], vazio: 'A URL ainda não enviou zonas.',
     aoClicar: l => { zonaSel = zonaSel === l[6] ? null : l[6]; $('abr-busca').value = zonaSel ? l[0] : ''; desenharMapaAbr(false); }});
   const tFic = Tabela('t-fic', {busca: 'fic-busca', contador: 'fic-n', filtro: filtroSelect('fic-ter', 4), aoClicar: l => det.abrir('hist', l[1])});
+  const tPac = Tabela('t-pac', {busca: 'pac-busca', contador: 'pac-n', numericas: [4], filtro: filtroSelect('pac-ter', 2),
+    aoClicar: l => det.abrir('hist', l[0]), vazio: 'Nenhuma visita no período.'});
   $('rel-ter').onchange = () => tRel.redesenhar();
+  $('pac-ter').onchange = () => tPac.redesenhar();
+  // competência dos relatórios: abre no mês atual; a escolha fica guardada neste navegador
+  try { const c = localStorage.getItem('tst-rel-comp'); if (c) $('rel-comp').value = c; } catch (e) { /* sem armazenamento */ }
+  if (!$('rel-comp').value) $('rel-comp').value = 'atual';
+  const trocarComp = v => {
+    $('rel-comp').value = v;
+    try { localStorage.setItem('tst-rel-comp', v); } catch (e) { /* sem armazenamento */ }
+    carregadas.delete('relatorios'); carregar('relatorios');
+  };
+  $('rel-comp').onchange = () => trocarComp($('rel-comp').value);
+  $('rel-ver-todas').onclick = e => { e.preventDefault(); trocarComp('todas'); };
   $('fic-ter').onchange = () => tFic.redesenhar();
 
   async function carregar(aba) {
     if (!aba || carregadas.has(aba)) return;
     carregadas.add(aba);
     $('sub-periodo').textContent = aba === 'relatorios' || aba === 'precos'
-      ? 'Lista atual enviada pela URL Saúde Residence'
+      ? (aba === 'relatorios' ? `Competência: ${$('rel-comp').selectedOptions[0].text} · lista atual enviada pela URL Saúde Residence`
+        : 'Lista atual enviada pela URL Saúde Residence')
       : 'Período: ' + periodo.rotulo() + ' · dados da URL Saúde Residence';
     try {
-      if (aba === 'relatorios') relatorios(await api('/api/operacional/relatorios'));
+      if (aba === 'relatorios') relatorios(await api('/api/operacional/relatorios?comp=' + $('rel-comp').value));
       else if (aba === 'profissional') profissionais(await api('/api/operacional/profissionais?' + qs()));
+      else if (aba === 'pacientes') pacientes(await api('/api/operacional/pacientes?' + qs()));
       else if (aba === 'abrangencia') abrangencia(await api('/api/operacional/abrangencia?' + qs()));
       else if (aba === 'fichas') fichas(await api('/api/operacional/fichas?' + qs()));
     } catch (e) { carregadas.delete(aba); toast(e.message, true); }
@@ -82,12 +98,21 @@
   function relatorios(r) {
     local.rel = r;
     contador('relatorios', r.total);
+    const todas = r.competencia === 'todas';
+    $('sub-periodo').textContent = `Competência: ${r.competencia_rotulo} · lista atual enviada pela URL Saúde Residence`;
+    $('rel-anteriores').hidden = todas || !r.anteriores;
+    $('rel-ant-n').textContent = `+ ${fmt(r.anteriores)} pendência${r.anteriores === 1 ? '' : 's'}`;
+    $('rel-ant-desde').textContent = r.mais_antiga_geral;
     kpis('k-rel', [
-      {tom: 'warn', icone: 'relatorios', rotulo: 'Relatórios pendentes', valor: fmt(r.total), sub: 'na lista atual da URL', det: 'rel_todos'},
+      {tom: 'warn', icone: 'relatorios', rotulo: 'Relatórios pendentes', valor: fmt(r.total),
+        sub: todas ? 'na lista atual da URL' : `competência ${r.competencia_rotulo}`, det: 'rel_todos'},
       {tom: 'neutro', icone: 'pacientes', rotulo: 'Pacientes', valor: fmt(r.pacientes), sub: 'com ao menos um relatório pendente', det: 'rel_pacientes'},
       {tom: 'neutro', icone: 'profissional', rotulo: 'Profissionais', valor: fmt(r.profissionais), sub: 'com relatórios a entregar', det: 'rel_todos'},
-      {tom: 'crit', icone: 'calendario', rotulo: 'Competência mais antiga', valor: r.mais_antiga, sub: 'relatório pendente há mais tempo',
-        det: 'rel_comp', valorDet: r.mais_antiga},
+      todas
+        ? {tom: 'crit', icone: 'calendario', rotulo: 'Competência mais antiga', valor: r.mais_antiga, sub: 'relatório pendente há mais tempo',
+          det: 'rel_comp', valorDet: r.mais_antiga}
+        : {tom: 'crit', icone: 'calendario', rotulo: 'Competências anteriores', valor: fmt(r.anteriores),
+          sub: `pendentes desde ${r.mais_antiga_geral} · clique para ver todas`, det: 'rel_ver_todas'},
     ]);
     listaBarras('l-rel-ter', r.por_terapia, {rotulo: i => i.nome, cor: i => corTerapia(i.rotulo), total: r.total, det: 'rel_ter'});
     listaBarras('l-rel-prof', r.por_profissional, {total: r.total, det: 'rel_prof'});
@@ -102,6 +127,20 @@
     // a 7ª coluna (oculta no cabeçalho) guarda a chave do profissional para o clique
     tProf.dados(['Profissional', 'Terapia', 'Visitas', 'Pacientes', 'Dias com visita', 'Bairros'],
       r.profissionais.map(p => Object.assign([p.nome, p.terapia, p.visitas, p.pacientes, p.dias, p.bairros], {6: p.chave})));
+  }
+
+  function pacientes(r) {
+    contador('pacientes', r.pacientes);
+    kpis('k-pac', [
+      {tom: 'acc', icone: 'pacientes', rotulo: 'Pacientes', valor: fmt(r.pacientes), sub: 'com visita no período'},
+      {tom: 'neutro', icone: 'profissional', rotulo: 'Profissionais', valor: fmt(r.profissionais), sub: 'que atenderam esses pacientes'},
+      {tom: 'neutro', icone: 'prontuario', rotulo: 'Visitas', valor: fmt(r.visitas), sub: 'registradas no App'},
+      ...r.por_terapia.slice(0, 5).map(t => ({tom: 'acc', icone: 'terapias', rotulo: t.nome, valor: fmt(t.valor), sub: 'pacientes no período'})),
+    ]);
+    $('pac-nota').textContent = `${fmt(r.total)} combinação(ões) · ${fmt(r.atendimentos)} atendimento(s)`;
+    opcoesTerapia('pac-ter', r.por_terapia);
+    tPac.dados(r.colunas, r.linhas);
+    if (r.truncado) toast('Período muito longo: exibindo as 10.000 primeiras linhas.');
   }
 
   // mapa de cobertura: todos os profissionais (quantos atendem cada bairro) ou a região de um profissional

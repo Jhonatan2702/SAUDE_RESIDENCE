@@ -91,7 +91,8 @@ window.GUIA = {
   'operacional:relatorios': {
     nome: 'Relatórios pendentes', resumo: 'O que falta entregar, por quem e desde quando.',
     passos: [
-      {aba: 'relatorios', alvo: '#k-rel', titulo: 'Resumo', texto: '<p>Total de relatórios pendentes, pacientes e profissionais envolvidos e a <b>competência mais antiga</b> (o atraso maior).</p><p>Esta lista não depende do período: um relatório some daqui quando é entregue no App.</p>'},
+      {aba: 'relatorios', alvo: '#rel-comp', titulo: 'Competência', texto: '<p>A lista abre no <b>mês atual</b>. Troque para <b>Mês anterior</b> ou <b>Todas</b> para ver o histórico.</p><p>Quando houver pendências de meses anteriores, um aviso amarelo mostra quantas são; clique em <b>Ver todas</b> para abri-las.</p>'},
+      {aba: 'relatorios', alvo: '#k-rel', titulo: 'Resumo', texto: '<p>Total de relatórios pendentes da competência escolhida, pacientes e profissionais envolvidos e quantas pendências ficaram de meses anteriores.</p><p>Esta lista não depende do período: um relatório some daqui quando é entregue no App.</p>'},
       {aba: 'relatorios', alvo: '#l-rel-comp', card: true, titulo: 'Por competência', texto: '<p>Mês de referência dos relatórios, <b>do mais antigo para o mais recente</b>. Comece cobrando os do topo.</p>'},
       {aba: 'relatorios', alvo: '#l-rel-prof', card: true, titulo: 'Por profissional', texto: '<p>Quem tem mais relatórios a entregar. Útil para conversar com cada profissional.</p>'},
       {aba: 'relatorios', alvo: '#rel-busca', card: true, titulo: 'Encontrar e exportar', texto: '<p>Busque por paciente, profissional ou terapia, filtre pela terapia e use <b>Exportar CSV</b> para enviar a lista por e-mail ou abrir no Excel.</p><p>As barras acima e cada linha da tabela também são clicáveis: abrem a lista filtrada e o histórico do paciente.</p>'},
@@ -101,6 +102,13 @@ window.GUIA = {
     nome: 'Profissional × atendimento', resumo: 'Os pacientes de cada profissional.',
     passos: [
       {aba: 'profissional', alvo: '#prof-busca', card: true, titulo: 'Escolha um profissional', texto: '<p>Lista de quem atendeu no período: visitas, pacientes, dias e bairros. Busque pelo nome.</p><p><b>Clique na linha</b> para ver os pacientes dele, com a primeira e a última visita de cada um.</p>'},
+    ],
+  },
+  'operacional:pacientes': {
+    nome: 'Operacional do paciente', resumo: 'Paciente / terapia / profissional no período.',
+    passos: [
+      {aba: 'pacientes', alvo: '#k-pac', titulo: 'Resumo', texto: '<p>Pacientes com visita no período, profissionais envolvidos, total de visitas e pacientes por terapia.</p>'},
+      {aba: 'pacientes', alvo: '#pac-busca', card: true, titulo: 'Quem atende quem', texto: '<p>Uma linha por <b>paciente, terapia e profissional</b>, com o número de visitas e a primeira e a última visita no período.</p><p>Busque, filtre pela terapia e use <b>Exportar CSV</b>. Clique numa linha para abrir o resumo completo do paciente.</p>'},
     ],
   },
   'operacional:abrangencia': {

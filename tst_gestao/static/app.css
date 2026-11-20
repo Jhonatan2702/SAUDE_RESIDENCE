@@ -231,6 +231,8 @@ tr.clicavel{cursor:pointer}
 td.forte{font-weight:600}
 .barra-tab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line)}
 .barra-tab .busca{max-width:320px}
+.filtro-comp{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;font-size:13px}
+.filtro-comp .dica{font-size:12.5px}
 .barra-tab .contador{margin-left:auto;font-size:12.5px;color:var(--mut);white-space:nowrap}
 .card:not(.flush) .barra-tab{padding:0 0 12px;border:0}
 

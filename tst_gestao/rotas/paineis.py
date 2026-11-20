@@ -19,6 +19,7 @@ ABAS_PAINEL = [
 ]
 ABAS_OPERACIONAL = [
     ("relatorios", "Relatórios pendentes", "relatorios"), ("profissional", "Profissional × atendimento", "profissional"),
+    ("pacientes", "Operacional do paciente", "pacientes"),
     ("abrangencia", "Região de abrangência", "bairro"), ("fichas", "Fichas realizadas no App", "prontuario"),
     ("precos", "Tabela de preços", "dinheiro"),
 ]
@@ -56,7 +57,7 @@ def operacional():
 def api_operacional(secao):
     ini, fim = datas()
     if secao == "relatorios":
-        return jsonify(op.relatorios())
+        return jsonify(op.relatorios(request.args.get("comp", "atual")))
     if secao == "profissionais":
         return jsonify(op.profissionais(ini, fim))
     if secao == "profissional":
@@ -64,6 +65,8 @@ def api_operacional(secao):
         if not chave:
             abort(400, "Informe o profissional.")
         return jsonify(op.pacientes_profissional(chave, ini, fim))
+    if secao == "pacientes":
+        return jsonify(op.pacientes(ini, fim))
     if secao == "abrangencia":
         return jsonify(op.abrangencia(ini, fim))
     if secao == "fichas":

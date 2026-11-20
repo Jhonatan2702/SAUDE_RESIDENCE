@@ -56,7 +56,7 @@ def test_cada_numero_abre_a_lista_de_pacientes(admin, dados, tipo, valor, espera
 
 
 def test_painel_operacional(admin, dados):
-    rel = admin.get("/api/operacional/relatorios").get_json()
+    rel = admin.get("/api/operacional/relatorios?comp=todas").get_json()
     assert rel["total"] == 1 and rel["linhas"][0][0] == "Ana Souza" and rel["linhas"][0][3] == "FISIO"
     assert rel["mais_antiga"] == "09/2026"
     fic = admin.get(f"/api/operacional/fichas?{P}").get_json()
@@ -70,6 +70,36 @@ def test_painel_operacional(admin, dados):
     assert abr["colunas"][2] == "Zona"
 
 
+def test_relatorios_por_competencia(app, dados):
+    from datetime import date
+
+    from tst_gestao import operacional as op
+    with app.app_context():
+        # o único relatório pendente é da competência 09/2026
+        atual = op.relatorios("atual", hoje=date(2026, 9, 15))
+        assert (atual["total"], atual["anteriores"], atual["competencia_rotulo"]) == (1, 0, "09/2026")
+        # em novembro ele sai da lista do mês, mas o aviso de anteriores não deixa o atraso sumir
+        nov = op.relatorios("atual", hoje=date(2026, 11, 20))
+        assert (nov["total"], nov["anteriores"], nov["total_geral"], nov["mais_antiga_geral"]) == (0, 1, 1, "09/2026")
+        assert op.relatorios("anterior", hoje=date(2026, 10, 3))["total"] == 1
+        # virada de ano: o mês anterior a janeiro é dezembro do ano passado
+        assert op.relatorios("anterior", hoje=date(2027, 1, 5))["competencia_rotulo"] == "12/2026"
+        todas = op.relatorios("todas", hoje=date(2026, 11, 20))
+        assert (todas["total"], todas["anteriores"]) == (1, 0)
+        assert op.relatorios("xyz", hoje=date(2026, 9, 1))["competencia"] == "atual"
+
+
+def test_operacional_do_paciente(admin, dados):
+    r = admin.get(f"/api/operacional/pacientes?{P}").get_json()
+    assert r["colunas"][:4] == ["Paciente", "Atendimento", "Terapia", "Profissional"]
+    fic = admin.get(f"/api/operacional/fichas?{P}").get_json()
+    # mesmas visitas das fichas, agrupadas por paciente / terapia / profissional
+    assert r["visitas"] == fic["total"] == sum(l[4] for l in r["linhas"]) and r["pacientes"] == fic["pacientes"]
+    assert len({(l[1], l[2], l[3]) for l in r["linhas"]}) == len(r["linhas"])
+    fisio = [l for l in r["linhas"] if l[3] == "Prof. Fisio"]
+    assert sorted(l[0] for l in fisio) == ["Ana Souza", "Carla Dias", "Davi Rocha"] and {l[2] for l in fisio} == {"FISIO"}
+
+
 def test_painel_sem_dados_nao_quebra(admin):
     d = admin.get(f"/api/painel?{P}").get_json()
     assert d["kpis"]["pacientes_ativos"] == 0 and d["kpis"]["mortalidade"] == 0
@@ -81,6 +111,7 @@ def test_perfis_de_acesso(admin, criar_usuario):
     assert op.get("/").headers["Location"].endswith("/operacional")
     assert op.get("/operacional").status_code == 200
     assert op.get(f"/api/operacional/relatorios?{P}").status_code == 200
+    assert op.get(f"/api/operacional/pacientes?{P}").status_code == 200
     for url in ("/painel", f"/api/painel?{P}", "/usuarios", "/integracao", "/api/usuarios"):
         assert op.get(url).status_code == 403, url
 

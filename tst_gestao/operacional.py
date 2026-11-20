@@ -2,6 +2,7 @@
 
 - Relatórios pendentes (lista atual enviada pela URL)
 - Profissional × atendimento (visitas do período por profissional e seus pacientes)
+- Operacional do paciente (paciente / terapia / profissional no período)
 - Região de abrangência / disponibilidade de bairro por profissional
 - Fichas realizadas no App (visitas registradas no período)
 - Tabela de preços por empresa (aguardando a URL enviar valores)
@@ -46,13 +47,34 @@ def linhas_relatorios(rel: list[dict]) -> dict:
     return {"colunas": COLS_RELATORIOS, "linhas": linhas, "drill": None}
 
 
-def relatorios() -> dict:
+COMPETENCIAS = ("atual", "anterior", "todas")
+
+
+def _mes(d: date, recuo: int = 0) -> str:
+    """Competência (AAAA-MM) do mês de d, recuando `recuo` meses."""
+    ano, mes = divmod(d.year * 12 + d.month - 1 - recuo, 12)
+    return f"{ano:04d}-{mes + 1:02d}"
+
+
+def relatorios(comp: str = "atual", hoje: date | None = None) -> dict:
+    """Relatórios pendentes da competência escolhida: mês atual (padrão), mês anterior ou todas.
+
+    Fora de "todas", informa quantas pendências de competências anteriores ficaram de fora,
+    para o atraso antigo não sumir sem ninguém perceber."""
+    comp = comp if comp in COMPETENCIAS else "atual"
     base = carregar()
-    rel = base.relatorios_pendentes()
+    todas = base.relatorios_pendentes()
+    alvo = None if comp == "todas" else _mes(hoje or date.today(), 1 if comp == "anterior" else 0)
+    chave = lambda r: _ordem_competencia(r.get("competencia"))[:7]
+    rel = todas if alvo is None else [r for r in todas if chave(r) == alvo]
+    anteriores = [] if alvo is None else [r for r in todas if chave(r) and chave(r) < alvo]
     competencias = Counter(_ordem_competencia(r.get("competencia")) for r in rel)
+    todas_comp = [c for c in (chave(r) for r in todas) if c]
     return {
         "atualizado_em": base.sincronizado,
-        "total": len(rel),
+        "competencia": comp, "competencia_rotulo": _competencia(alvo) if alvo else "Todas",
+        "total": len(rel), "total_geral": len(todas), "anteriores": len(anteriores),
+        "mais_antiga_geral": _competencia(min(todas_comp)) if todas_comp else "—",
         "pacientes": len({r["paciente"].casefold() for r in rel}),
         "profissionais": len({r.get("profissional") for r in rel if r.get("profissional")}),
         "mais_antiga": _competencia(min(competencias)[:7]) if competencias else "—",
@@ -119,6 +141,47 @@ def pacientes_profissional(chave: str, ini: date | None, fim: date | None) -> di
     return {"titulo": f"Pacientes de {nome or 'profissional'} ({br(ini)} a {br(fim)})",
             "colunas": ["Paciente", "Atendimento", "Operadora", "Serviço", "Bairro", "Terapias", "Visitas", "Primeira", "Última"],
             "linhas": linhas, "total": len(linhas), "truncado": False, "drill": None}
+
+
+# ---------------------------------------------------------------- operacional do paciente
+COLS_PACIENTES = ["Paciente", "Atendimento", "Terapia", "Profissional", "Visitas", "Primeira", "Última", "Operadora", "Bairro"]
+
+
+def pacientes(ini: date | None, fim: date | None) -> dict:
+    """Visão completa paciente / terapia / profissional no período: uma linha por combinação, com as visitas."""
+    ini, fim = periodo(ini, fim)
+    base = carregar()
+    grupos: dict[tuple, dict] = {}
+    for v in base.visitas_entre(ini, fim):
+        a = base.por_id.get(v["atendimento_origem_id"], {})
+        k = (v["atendimento_origem_id"], v["_ter"], chave_profissional(v) or "")
+        g = grupos.setdefault(k, {
+            "paciente": a.get("nome_paciente") or "Paciente não encontrado", "pac": a.get("_pac"),
+            "atendimento": v["atendimento_origem_id"], "terapia": v["_ter"], "profissional": v["profissional"] or "Não informado",
+            "operadora": a.get("operadora") or "—", "bairro": a.get("bairro") or "—",
+            "visitas": 0, "primeira": v["_data"], "ultima": v["_data"]})
+        g["visitas"] += 1
+        g["primeira"], g["ultima"] = min(g["primeira"], v["_data"]), max(g["ultima"], v["_data"])
+    ordem = sorted(grupos.values(), key=lambda g: (g["paciente"].casefold(), g["atendimento"], g["terapia"], g["profissional"].casefold()))
+    linhas = [[g["paciente"], g["atendimento"], g["terapia"], g["profissional"], g["visitas"], br(g["primeira"]), br(g["ultima"]),
+               g["operadora"], g["bairro"]] for g in ordem]
+    ter = Counter({t: len(p) for t, p in _por_terapia(ordem).items()})  # pacientes distintos por terapia
+    return {
+        "periodo": {"ini": ini.isoformat(), "fim": fim.isoformat()}, "atualizado_em": base.sincronizado,
+        "pacientes": len({g["pac"] or g["paciente"] for g in ordem}), "atendimentos": len({g["atendimento"] for g in ordem}),
+        "profissionais": len({g["profissional"] for g in ordem if g["profissional"] != "Não informado"}),
+        "visitas": sum(g["visitas"] for g in ordem),
+        "por_terapia": [{"rotulo": k, "nome": NOMES_TERAPIA.get(k, k), "valor": n} for k, n in ter.most_common()],
+        "colunas": COLS_PACIENTES, "linhas": linhas[:LIMITE], "total": len(linhas), "truncado": len(linhas) > LIMITE,
+    }
+
+
+def _por_terapia(grupos: list[dict]) -> dict[str, set]:
+    """{terapia: pacientes distintos atendidos nela}."""
+    saida: dict[str, set] = {}
+    for g in grupos:
+        saida.setdefault(g["terapia"], set()).add(g["pac"] or g["paciente"])
+    return saida
 
 
 # ---------------------------------------------------------------- região de abrangência
