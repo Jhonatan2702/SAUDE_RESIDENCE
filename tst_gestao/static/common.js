@@ -181,7 +181,7 @@ function kpis(id, cards) {
     return `<${tag} class="kpi tom-${k.tom || 'neutro'}${k.destaque ? ' destaque' : ''}"${k.det ? ` data-det="${esc(k.det)}" data-valor="${esc(k.valorDet || '')}"` : ''}>` +
       `<span class="k-rot">${ic(k.icone || 'info')}${esc(k.rotulo)}${k.info ? `<span class="info" tabindex="0" data-info="${esc(k.info)}">${ic('info')}</span>` : ''}</span>` +
       `<span class="k-val">${esc(k.valor)}${k.sufixo ? `<small>${esc(k.sufixo)}</small>` : ''}</span>` +
-      (k.sub ? `<span class="k-sub">${k.sub}</span>` : '') + (k.det ? '<span class="k-link">Ver pacientes →</span>' : '') +
+      (k.sub ? `<span class="k-sub">${k.sub}</span>` : '') + (k.det ? `<span class="k-link">${esc(k.link || 'Ver pacientes')} →</span>` : '') +
       `</${k.det ? 'button' : 'div'}>`;
   }).join('');
 }

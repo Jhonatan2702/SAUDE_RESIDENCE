@@ -23,6 +23,26 @@
       return lista('Pacientes com relatórios pendentes', ['Paciente', 'Relatórios', 'Terapias', 'Competência mais antiga'],
         Object.entries(g).sort((a, b) => b[1].n - a[1].n).map(([p, x]) => [p, x.n, [...x.ters].join(' · '), x.comp]));
     }
+    const PC = local.pac;
+    if (tipo.startsWith('pac_') && PC) {
+      // colunas: 0 paciente, 1 atendimento, 2 terapia, 3 profissional, 4 visitas, 5 primeira, 6 última, 7 operadora, 8 bairro
+      const ord = d => d.split('/').reverse().join('');  // dd/mm/aaaa -> aaaammdd para comparar
+      const juntar = (chave, linhas) => {
+        const g = {};
+        linhas.forEach(l => {
+          const x = (g[l[chave]] ||= {vis: 0, pac: new Set(), ter: new Set(), prof: new Set(), ult: l[6]});
+          x.vis += l[4]; x.pac.add(l[0]); x.ter.add(l[2]); x.prof.add(l[3]);
+          if (ord(l[6]) > ord(x.ult)) x.ult = l[6];
+        });
+        return Object.entries(g).sort((a, b) => b[1].vis - a[1].vis);
+      };
+      if (tipo === 'pac_pacientes') return lista('Pacientes com visita no período', ['Paciente', 'Terapias', 'Profissionais', 'Visitas', 'Última visita'],
+        juntar(0, PC.linhas).map(([p, x]) => [p, [...x.ter].join(' · '), [...x.prof].join('; '), x.vis, x.ult]));
+      if (tipo === 'pac_prof') return lista('Profissionais que atenderam no período', ['Profissional', 'Pacientes', 'Terapias', 'Visitas', 'Última visita'],
+        juntar(3, PC.linhas).map(([p, x]) => [p, x.pac.size, [...x.ter].join(' · '), x.vis, x.ult]), {tipo: 'profissional', col: 0});
+      const linhas = tipo === 'pac_ter' ? PC.linhas.filter(l => l[2] === valor) : PC.linhas;
+      return lista(tipo === 'pac_ter' ? `Pacientes em ${NOMES[valor] || valor}` : 'Paciente / terapia / profissional', PC.colunas, linhas);
+    }
     if (tipo.startsWith('fic_') && F) {
       if (tipo === 'fic_resumo') {
         const g = {};
@@ -112,7 +132,7 @@
         ? {tom: 'crit', icone: 'calendario', rotulo: 'Competência mais antiga', valor: r.mais_antiga, sub: 'relatório pendente há mais tempo',
           det: 'rel_comp', valorDet: r.mais_antiga}
         : {tom: 'crit', icone: 'calendario', rotulo: 'Competências anteriores', valor: fmt(r.anteriores),
-          sub: `pendentes desde ${r.mais_antiga_geral} · clique para ver todas`, det: 'rel_ver_todas'},
+          sub: `pendentes desde ${r.mais_antiga_geral}`, det: 'rel_ver_todas', link: 'Ver todas'},
     ]);
     listaBarras('l-rel-ter', r.por_terapia, {rotulo: i => i.nome, cor: i => corTerapia(i.rotulo), total: r.total, det: 'rel_ter'});
     listaBarras('l-rel-prof', r.por_profissional, {total: r.total, det: 'rel_prof'});
@@ -130,12 +150,14 @@
   }
 
   function pacientes(r) {
+    local.pac = r;
     contador('pacientes', r.pacientes);
     kpis('k-pac', [
-      {tom: 'acc', icone: 'pacientes', rotulo: 'Pacientes', valor: fmt(r.pacientes), sub: 'com visita no período'},
-      {tom: 'neutro', icone: 'profissional', rotulo: 'Profissionais', valor: fmt(r.profissionais), sub: 'que atenderam esses pacientes'},
-      {tom: 'neutro', icone: 'prontuario', rotulo: 'Visitas', valor: fmt(r.visitas), sub: 'registradas no App'},
-      ...r.por_terapia.slice(0, 5).map(t => ({tom: 'acc', icone: 'terapias', rotulo: t.nome, valor: fmt(t.valor), sub: 'pacientes no período'})),
+      {tom: 'acc', icone: 'pacientes', rotulo: 'Pacientes', valor: fmt(r.pacientes), sub: 'com visita no período', det: 'pac_pacientes'},
+      {tom: 'neutro', icone: 'profissional', rotulo: 'Profissionais', valor: fmt(r.profissionais), sub: 'que atenderam esses pacientes', det: 'pac_prof', link: 'Ver profissionais'},
+      {tom: 'neutro', icone: 'prontuario', rotulo: 'Visitas', valor: fmt(r.visitas), sub: 'registradas no App', det: 'pac_todos', link: 'Ver lista completa'},
+      ...r.por_terapia.slice(0, 5).map(t => ({tom: 'acc', icone: 'terapias', rotulo: t.nome, valor: fmt(t.valor), sub: 'pacientes no período',
+        det: 'pac_ter', valorDet: t.rotulo})),
     ]);
     $('pac-nota').textContent = `${fmt(r.total)} combinação(ões) · ${fmt(r.atendimentos)} atendimento(s)`;
     opcoesTerapia('pac-ter', r.por_terapia);
