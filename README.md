@@ -58,7 +58,7 @@ Os níveis da versão anterior (Consulta e Operador) são convertidos automatica
 ## Painel BI (Gestor e Administrador)
 Organizado em abas; todo número é clicável e abre a lista de pacientes que o compõe (com busca e exportação CSV).
 
-- **Visão geral:** pacientes ativos, monitoramento com terapias, mortalidade, pacientes com terapia pendente, admissões e altas, visitas, ativos sem visita, relatórios pendentes e **orçamentos vencidos**; situação dos orçamentos dos atendimentos ativos; séries mensais de visitas e de admissões, altas e óbitos.
+- **Visão geral:** pacientes ativos, pacientes com terapias, monitoramento com terapias, mortalidade, pacientes com terapia pendente, admissões e altas com terapias (com o total do período como observação), visitas, ativos sem visita (só Monitoramento, ID, Plantão e Serv. Prof. Não Méd.) e relatórios pendentes dos 2 últimos meses (no detalhe, caixas "Somente <ano>" e "Somente 2 últimos meses" vêm marcadas); séries mensais de visitas e de admissões, altas e óbitos.
 - **Resumo do profissional e do paciente:** busca rápida no topo dos painéis, ou clique no nome em qualquer lista. O do profissional traz visitas, pacientes, dias, bairros, zonas, pacientes pendentes, relatórios e evolução mensal. O do paciente traz dados, situação de cada terapia, atendimentos e orçamentos, profissionais, histórico de visitas, relatórios e evolução mensal. Links diretos: `?profissional=Nome` e `?paciente=Nome`.
 - **Ficha do bairro:** clicar num bairro (mapa, rankings, tabelas de abrangência) abre zonas, profissionais, pacientes com terapias e pendências, relatórios e operadoras do bairro, descendo até o histórico de cada paciente. Link direto: `/painel?bairro=Meireles#mapa`.
 - **Mapa por bairro:** mapa de Fortaleza pintado pelo indicador escolhido (pacientes ativos, em terapia, terapia pendente, visitas, profissionais, relatórios pendentes), com filtro por terapia, destaque de uma zona de atendimento e ranking de bairros e de zonas.
@@ -74,7 +74,7 @@ Organizado em abas; todo número é clicável e abre a lista de pacientes que o 
 - **Terapia:** especialidade da visita (Fisioterapia → FISIO, Fonoaudiologia → FONO, Terapeuta Ocupacional → TO, Nutricionista → NUTRI, Psicólogo → PSICO).
 - **Pacientes por terapia:** pacientes ativos com ao menos uma visita da terapia nos **últimos 90 dias** até a data final, contando só visitas de atendimentos **ativos**: a alta encerra o ciclo, e visitas de um atendimento encerrado não geram pendência, mesmo se o paciente for readmitido.
 - **Complexidade:** quantidade de terapias diferentes que o paciente ativo recebeu nos últimos 90 dias.
-- **Terapia pendente:** paciente ativo indicado com terapias (`possuiterapias = SIM`) que fez a terapia nos últimos 90 dias, mas está há mais de **15 dias** sem visita dela. Também conta quem é indicado com terapias e não teve nenhuma visita de terapia em 90 dias.
+- **Terapia pendente:** paciente ativo indicado com terapias (`possuiterapias = SIM`) que fez a terapia nos últimos 90 dias, mas está há mais de **5 dias** sem visita dela. Também conta quem é indicado com terapias e não teve nenhuma visita de terapia em 90 dias.
 - **Monitoramento com terapias:** pacientes ativos no serviço *Monitoramento* com `possuiterapias = SIM`.
 - **Mortalidade:** pacientes que foram a óbito no período (condição de alta “Óbito”) ÷ pacientes atendidos no período (admitidos até o fim e sem alta antes do início) × 100.
 - **Altas:** não incluem óbitos, que são contados à parte.

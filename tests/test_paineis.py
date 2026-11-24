@@ -24,7 +24,7 @@ def test_indicadores_do_painel(admin, dados):
     por_ter = {t["sigla"]: t for t in d["terapias"]}
     assert {s: por_ter[s]["pacientes"] for s in ("FISIO", "FONO", "TO", "NUTRI", "PSICO")} == \
         {"FISIO": 2, "FONO": 2, "TO": 1, "NUTRI": 1, "PSICO": 1}
-    # quantos pacientes por terapia pendente: Ana sem Nutri há 15+ dias; Bruno indicado e sem nenhuma visita
+    # quantos pacientes por terapia pendente: Ana sem Nutri há 5+ dias; Bruno indicado e sem nenhuma visita
     assert por_ter["NUTRI"]["pendentes"] == 1 and k["sem_atendimento_terapia"] == 1 and k["pendentes"] == 2
     # complexidade pela quantidade de terapias: Ana 3 (Intermediário), Davi 4 (Intensivo)
     assert {n["rotulo"]: n["valor"] for n in d["complexidade"]} == {"Básico": 0, "Intermediário": 1, "Intensivo": 1}
@@ -169,11 +169,10 @@ def test_bairro_sem_cobertura(admin, dados):
 
 
 def test_orcamentos_dos_atendimentos_ativos(admin, dados):
+    # o Painel BI não mostra mais orçamentos (card e gráfico removidos), mas o detalhe segue disponível
     d = admin.get(f"/api/painel?{P}").get_json()
-    orc = {o["chave"]: o["valor"] for o in d["orcamentos"]}
-    # em 31/10: Bruno venceu em 15/10; Ana vence no próprio dia; Davi e o 2º atendimento da Ana não têm orçamento
-    assert orc == {"vencido": 1, "vence_7": 1, "vence_30": 0, "em_dia": 0, "sem": 2}
-    assert d["kpis"]["orcamentos_vencidos"] == 1
+    assert "orcamentos" not in d and "orcamentos_vencidos" not in d["kpis"]
+    # em 31/10: Bruno venceu em 15/10
     lista = admin.get(f"/api/painel/detalhe?tipo=orcamento&valor=vencido&{P}").get_json()
     assert lista["linhas"][0][0] == "Bruno Lima" and lista["linhas"][0][4] == "ALDEOTA 1" and lista["linhas"][0][7] == -16
 
@@ -207,7 +206,7 @@ def test_ficha_do_bairro(admin, dados, criar_usuario):
     # Prof. Nutri não visitou ninguém em outubro, mas atendeu a Ana (Parquelândia) em agosto: cobre o bairro
     assert prof["Prof. Nutri"][2:5] == ["Cobre o bairro", 1, 0]
     pac = {l[0]: l for l in _aba(f, "pacientes")["linhas"]}
-    assert pac["Ana Souza"][4] == "Nutrição" and "Prof. Fono (FONO)" in pac["Ana Souza"][5]
+    assert pac["Ana Souza"][4] == "Fisioterapia, Fonoaudiologia, Nutrição" and "Prof. Fono (FONO)" in pac["Ana Souza"][5]
     # o perfil Operacional também abre as fichas (mapa de cobertura, listas)
     op = criar_usuario("operador4", "operacional")
     assert op.get(f"/api/ficha/bairro?valor=Aldeota&{P}").get_json()["kpis"][2]["valor"] == 1
@@ -240,7 +239,7 @@ def test_ficha_do_paciente(admin, dados):
     assert dados_["Idade"] == "81 anos" and dados_["Zona de atendimento"] == "ALDEOTA 1" and dados_["Monitoramento com terapias"] == "Sim"
     assert dados_["Complexidade (pelas terapias, 90 dias)"] == "Intermediário"
     ter = {l[0]: l for l in _aba(f, "terapias")["linhas"]}
-    assert ter["Fisioterapia"][1] == "Em dia" and ter["Nutrição"][1] == "Pendente há 77 dias"
+    assert ter["Fisioterapia"][1] == "Pendente há 11 dias" and ter["Nutrição"][1] == "Pendente há 77 dias"
     atend = _aba(f, "atendimentos")["linhas"]
     assert len(atend) == 2 and {a[0] for a in atend} == {"1", "2"}
     assert any(a[9] == "Vence em até 7 dias" for a in atend)
@@ -328,3 +327,34 @@ def test_ultimo_acesso_registra_quem_ja_estava_logado(admin, criar_usuario):
         conn.execute("UPDATE usuarios SET ultimo_acesso = '2020-01-01T00:00:00' WHERE usuario = 'operador7'")
     op.get("/api/operacional/relatorios")
     assert ler() > "2020-01-01T00:00:00"
+
+
+def test_cards_com_terapias_e_sem_visita(admin, dados):
+    k = admin.get(f"/api/painel?{P}").get_json()["kpis"]
+    # Ana e Davi têm visitas de terapia; Bruno é indicado com terapias pela URL
+    assert (k["pacientes_ativos"], k["com_terapias"]) == (3, 3)
+    # a única admissão de outubro (Ana, Visita Médica) não tem terapias: fica só na observação
+    assert (k["admissoes"], k["admissoes_terapias"], k["altas_terapias"]) == (1, 0, 0)
+    r = admin.get(f"/api/painel/detalhe?tipo=admissoes&valor=terapias&{P}").get_json()
+    assert r["total"] == 0 and "com terapias" in r["titulo"]
+    assert admin.get(f"/api/painel/detalhe?tipo=admissoes&{P}").get_json()["total"] == 1
+
+
+def test_servico_acompanhado():
+    from tst_gestao.fonte import servico_acompanhado
+    sim = ["Monitoramento", "Internação Domiciliar", "Plantão Aux. 24h", "Plantão de Cuidador 12h Diurno", "Serv. Prof. Não Méd."]
+    nao = ["Visita Médica", "Enfermagem Domiciliar", "EXAMES", "Outros", None]
+    assert all(servico_acompanhado({"servico": s}) for s in sim)
+    assert not any(servico_acompanhado({"servico": s}) for s in nao)
+
+
+def test_relatorios_recentes_e_filtros_do_detalhe():
+    from datetime import date
+    from tst_gestao import operacional as op
+    hoje = date(2026, 1, 10)
+    rel = [{"competencia": c} for c in ("01/2026", "12/2025", "11/2025", "2026-01")]
+    assert [op.relatorio_recente(r, hoje) for r in rel] == [True, False, False, True]
+    f = {x["id"]: x for x in op.filtros_relatorios(rel, hoje)}
+    assert f["ano"]["rotulo"] == "Somente 2026" and f["ano"]["ativo"] and f["meses"]["ativo"]
+    # na ordem do detalhe (competência mais antiga primeiro): 11/2025, 12/2025, 01/2026, 01/2026
+    assert f["ano"]["marcas"] == [0, 0, 1, 1] and f["meses"]["marcas"] == [0, 1, 1, 1]

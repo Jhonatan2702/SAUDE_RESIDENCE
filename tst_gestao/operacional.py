@@ -40,11 +40,31 @@ def _ordem_competencia(c: str | None) -> str:
 
 
 # ---------------------------------------------------------------- relatórios pendentes
+def _ordenar_relatorios(rel: list[dict]) -> list[dict]:
+    return sorted(rel, key=lambda r: (_ordem_competencia(r.get("competencia")), (r.get("profissional") or "").casefold()))
+
+
 def linhas_relatorios(rel: list[dict]) -> dict:
-    rel = sorted(rel, key=lambda r: (_ordem_competencia(r.get("competencia")), (r.get("profissional") or "").casefold()))
+    rel = _ordenar_relatorios(rel)
     linhas = [[r["paciente"], r["atendimento"], r.get("profissional") or "—", r["terapia"], r.get("especialidade") or "—",
                _competencia(r.get("competencia")), r.get("operadora") or "—", r.get("id") or "—"] for r in rel]
     return {"colunas": COLS_RELATORIOS, "linhas": linhas, "drill": None}
+
+
+def relatorio_recente(r: dict, hoje: date | None = None) -> bool:
+    """Competência do ano corrente e dos 2 últimos meses (mês atual e anterior): o padrão do card do Painel BI."""
+    hoje = hoje or date.today()
+    c = _ordem_competencia(r.get("competencia"))[:7]
+    return c[:4] == str(hoje.year) and c >= _mes(hoje, 1)
+
+
+def filtros_relatorios(rel: list[dict], hoje: date | None = None) -> list[dict]:
+    """Caixas do detalhe (vêm marcadas): "Somente <ano>" e "Somente 2 últimos meses". Marcas na ordem de linhas_relatorios."""
+    hoje = hoje or date.today()
+    comp = [_ordem_competencia(r.get("competencia"))[:7] for r in _ordenar_relatorios(rel)]
+    return [{"id": "ano", "rotulo": f"Somente {hoje.year}", "ativo": True, "marcas": [int(c[:4] == str(hoje.year)) for c in comp]},
+            {"id": "meses", "rotulo": "Somente 2 últimos meses", "ativo": True,
+             "marcas": [int(c >= _mes(hoje, 1)) for c in comp]}]
 
 
 COMPETENCIAS = ("atual", "anterior", "todas")

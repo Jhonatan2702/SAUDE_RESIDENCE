@@ -19,7 +19,7 @@ from datetime import date, timedelta
 from .db import connect
 
 JANELA_TERAPIA = 90   # dias que definem "paciente em terapia" e a complexidade
-JANELA_ATRASO = 15    # dias sem visita de uma terapia em andamento = pendente
+JANELA_ATRASO = 5     # dias sem visita de uma terapia em andamento = pendente
 JANELA_COBERTURA = 180  # profissional "cobre" um bairro se visitou alguém lá nesses dias (mesmo sem visita no período)
 FAIXAS_IDADE = [("0-17", 0, 17), ("18-39", 18, 39), ("40-59", 40, 59), ("60-79", 60, 79), ("80+", 80, 130)]
 TERAPIAS = ["FISIO", "FONO", "TO", "NUTRI", "PSICO"]
@@ -145,6 +145,15 @@ def eh_monitoramento(a: dict) -> bool:
 
 def tem_terapias(a: dict) -> bool:
     return (a["possui_terapias"] or "").strip().upper() in ("SIM", "S")
+
+
+SERVICOS_ACOMPANHADOS = ("monitoramento", "internacao domiciliar", "plantao", "serv prof nao med")
+
+
+def servico_acompanhado(a: dict) -> bool:
+    """Serviços que exigem visita periódica: Monitoramento, Internação domiciliar, Plantões e Serv. Prof. Não Méd."""
+    s = " ".join(sem_acento(a["servico"] or "").lower().replace(".", " ").split())
+    return s.startswith(SERVICOS_ACOMPANHADOS)
 
 
 def ativo_em(a: dict, dia: date) -> bool:

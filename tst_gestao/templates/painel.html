@@ -14,13 +14,8 @@
 <section class="aba" id="aba-geral">
   <div class="kpis" id="k-geral"></div>
   <div class="grade g2">
-    <div class="card">{{ ui.cab('Orçamentos dos atendimentos ativos', 'Situação do orçamento (autorização) de cada atendimento ativo na data final, pelas datas de início e fim de orçamento enviadas pela URL. Vencido = data de fim anterior à data final do período. Clique numa linha para ver os atendimentos.', nota_id='orc-nota') }}
-      <p class="card-desc">Atendimentos em andamento que precisam de renovação de orçamento junto à operadora.</p>
-      <div class="lbar" id="l-orc"></div></div>
     <div class="card">{{ ui.cab('Visitas por mês', 'Visitas registradas pelos profissionais em cada mês. A série termina no mês da data final e mostra no mínimo 8 meses. Clique num ponto para ver as visitas.', 'série mensal') }}
       <div class="grafico"><canvas id="c-visitas"></canvas></div></div>
-  </div>
-  <div class="grade g2">
     <div class="card">{{ ui.cab('Admissões, altas e óbitos por mês', 'Atendimentos admitidos, com alta (exceto óbito) e com óbito em cada mês, pelas datas enviadas pela URL. Clique numa barra para ver os pacientes.', 'série mensal') }}
       <div class="grafico"><canvas id="c-fluxo"></canvas></div></div>
   </div>
@@ -58,7 +53,7 @@
   <h2 class="secao">Pacientes por terapia</h2>
   <div class="terapias" id="ter-blocos"></div>
   <div class="grade g2">
-    <div class="card">{{ ui.cab('Pacientes com terapia pendente', 'Por terapia: paciente ativo, indicado com terapias pela URL, que fez a terapia nos últimos 90 dias mas está há mais de 15 dias sem visita dela. A última linha conta quem é indicado com terapias e não teve nenhuma visita de terapia em 90 dias. Um paciente pode estar pendente em mais de uma terapia.', nota_id='pend-nota',
+    <div class="card">{{ ui.cab('Pacientes com terapia pendente', 'Por terapia: paciente ativo, indicado com terapias pela URL, que fez a terapia nos últimos 90 dias mas está há mais de 5 dias sem visita dela. A última linha conta quem é indicado com terapias e não teve nenhuma visita de terapia em 90 dias. Um paciente pode estar pendente em mais de uma terapia.', nota_id='pend-nota',
         desc='Quantos pacientes estão sem visita recente em cada terapia. Clique numa linha para ver quem são.') }}
       <div class="lbar" id="l-pend"></div></div>
     <div class="card">{{ ui.cab('Visitas no período, por terapia', 'Quantidade de visitas de cada terapia dentro do período selecionado.', 'no período') }}

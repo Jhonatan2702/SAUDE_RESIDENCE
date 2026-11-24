@@ -191,20 +191,29 @@ function Detalhe(buscar) {
   const dlg = $('dlg-det'), buscaEl = $('det-busca');
   const pilha = [];
   let atual = null;
+  const filtrosEl = $('det-filtros');
+  let ligados = [], visiveis = [];  // caixas de filtro do detalhe atual (r.filtros) e linhas exibidas
   async function abrir(tipo, valor = '', empilhar = true) {
     try {
       const r = await buscar(tipo, valor);
       if (!r) return;  // tratado por outro componente (ex.: ficha do bairro)
       if (empilhar) pilha.push({tipo, valor});
-      atual = r; buscaEl.value = ''; desenhar();
+      atual = r; buscaEl.value = '';
+      ligados = (r.filtros || []).map(f => !!f.ativo);
+      if (filtrosEl) filtrosEl.innerHTML = (r.filtros || []).map((f, i) =>
+        `<label class="chk"><input type="checkbox" data-f="${i}"${ligados[i] ? ' checked' : ''}> ${esc(f.rotulo)}</label>`).join('');
+      desenhar();
       if (!dlg.open) dlg.showModal();
     } catch (e) { toast(e.message, true); }
   }
   function desenhar() {
     const r = atual, termo = buscaEl.value.trim().toLowerCase();
-    const linhas = termo ? r.linhas.filter(l => l.join(' ').toLowerCase().includes(termo)) : r.linhas;
+    const fs = (r.filtros || []).filter((f, i) => ligados[i]);
+    let linhas = fs.length ? r.linhas.filter((l, i) => fs.every(f => f.marcas[i])) : r.linhas;
+    if (termo) linhas = linhas.filter(l => l.join(' ').toLowerCase().includes(termo));
+    visiveis = linhas;
     $('det-t').textContent = r.titulo;
-    $('det-n').textContent = termo ? `${fmt(linhas.length)} de ${fmt(r.total)}` : `${fmt(r.total)} registro(s)` + (r.truncado ? ` · exibindo ${fmt(r.linhas.length)}` : '');
+    $('det-n').textContent = termo || fs.length ? `${fmt(linhas.length)} de ${fmt(r.total)}` : `${fmt(r.total)} registro(s)` + (r.truncado ? ` · exibindo ${fmt(r.linhas.length)}` : '');
     $('det-h').innerHTML = '<tr>' + r.colunas.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
     $('det-b').innerHTML = linhas.map(l => {
       const alvo = r.drill ? ` data-drill="${esc(r.drill.tipo)}" data-valor="${esc(l[r.drill.col])}" class="clicavel" title="Ver histórico"` : '';
@@ -213,10 +222,11 @@ function Detalhe(buscar) {
     $('det-voltar').hidden = pilha.length < 2;
   }
   buscaEl.addEventListener('input', () => atual && desenhar());
+  if (filtrosEl) filtrosEl.addEventListener('change', e => { const i = e.target.dataset.f; if (i != null && atual) { ligados[i] = e.target.checked; desenhar(); } });
   $('det-fechar').onclick = () => dlg.close();
   dlg.addEventListener('close', () => { pilha.length = 0; });
   $('det-voltar').onclick = () => { pilha.pop(); const ant = pilha.pop(); if (ant) abrir(ant.tipo, ant.valor); };
-  $('det-csv').onclick = () => atual && baixarCSV('tst-detalhe.csv', atual.colunas, atual.linhas);
+  $('det-csv').onclick = () => atual && baixarCSV('tst-detalhe.csv', atual.colunas, visiveis);
   $('det-b').addEventListener('click', e => { const tr = e.target.closest('[data-drill]'); if (tr) abrir(tr.dataset.drill, tr.dataset.valor); });
   document.addEventListener('click', e => {
     if (e.target.closest('.info') || dlg.contains(e.target)) return;

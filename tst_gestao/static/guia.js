@@ -25,9 +25,7 @@ window.GUIA = {
   'painel:geral': {
     nome: 'Visão geral', resumo: 'O resumo da carteira em uma tela.',
     passos: [
-      {aba: 'geral', alvo: '#k-geral', titulo: 'Os números do período', texto: '<p>O resumo da carteira no período escolhido:</p><ul><li><b>Pacientes ativos</b> na data final.</li><li><b>Monitoramento com terapias</b>.</li><li><b>Mortalidade</b>.</li><li><b>Terapias pendentes</b>.</li><li>Admissões e altas.</li><li>Visitas.</li><li>Ativos sem visita.</li><li>Relatórios pendentes.</li><li>Orçamentos vencidos.</li></ul><p>A borda colorida indica o tipo: azul informa, verde é entrada, laranja pede atenção e vermelho é crítico.</p>'},
-      {aba: 'geral', alvo: '.kpi[data-valor="vencido"]', card: true, titulo: 'Orçamentos vencidos', texto: '<p>Atendimentos <b>em andamento</b> cujo orçamento (autorização da operadora) já venceu.</p><p><b>O que fazer:</b> abra a lista e encaminhe a renovação com cada operadora.</p>'},
-      {aba: 'geral', alvo: '#l-orc', card: true, titulo: 'Situação dos orçamentos', texto: '<p>Todos os atendimentos ativos, do mais urgente (vencido) ao mais tranquilo.</p><p>Olhe toda semana a faixa <b>“vence em até 7 dias”</b> para agir antes de vencer.</p>'},
+      {aba: 'geral', alvo: '#k-geral', titulo: 'Os números do período', texto: '<p>O resumo da carteira no período escolhido:</p><ul><li><b>Pacientes ativos</b> na data final.</li><li><b>Pacientes com terapias</b>.</li><li><b>Monitoramento com terapias</b>.</li><li><b>Mortalidade</b>.</li><li><b>Terapias pendentes</b>.</li><li>Admissões e altas com terapias.</li><li>Visitas.</li><li>Ativos sem visita.</li><li>Relatórios pendentes dos 2 últimos meses.</li></ul><p>A borda colorida indica o tipo: azul informa, verde é entrada, laranja pede atenção e vermelho é crítico.</p>'},
       {aba: 'geral', alvo: '#c-visitas', card: true, titulo: 'Visitas por mês', texto: '<p>Tendência do volume de visitas. Clique num ponto para ver as visitas daquele mês.</p><p><b>Atenção:</b> o mês atual ainda está em andamento, então aparece mais baixo.</p>'},
       {aba: 'geral', alvo: '#c-fluxo', card: true, titulo: 'Entradas e saídas', texto: '<p>Admissões (azul), altas (verde-água) e óbitos (laranja) de cada mês.</p><p>Mais admissões que altas = carteira crescendo.</p>'},
     ],
@@ -48,7 +46,7 @@ window.GUIA = {
     passos: [
       {aba: 'terapias', alvo: '#k-terapias', titulo: 'Resumo das terapias', texto: '<p><b>Pacientes em terapia</b>: com visita de terapia nos últimos 90 dias.</p><p><b>Monitoramento com terapias</b>: pacientes do serviço Monitoramento indicados com terapias.</p><p><b>Pendentes</b> e <b>indicados sem nenhuma terapia</b> são os alertas.</p>'},
       {aba: 'terapias', alvo: '#ter-blocos', titulo: 'Pacientes por terapia', texto: '<p>Quantos pacientes estão em cada terapia (ex.: 72 em Fisio). Embaixo: pacientes e visitas no período e quantos estão pendentes.</p><p>Clique num bloco para ver os pacientes.</p>'},
-      {aba: 'terapias', alvo: '#l-pend', card: true, titulo: 'Quem está com terapia pendente', texto: '<p>Pacientes em terapia, mas <b>sem visita há mais de 15 dias</b> naquela terapia.</p><p>A barra vermelha mostra quem é indicado com terapias e não teve nenhuma visita em 90 dias.</p><p><b>O que fazer:</b> abra a lista e verifique a agenda com o profissional.</p>'},
+      {aba: 'terapias', alvo: '#l-pend', card: true, titulo: 'Quem está com terapia pendente', texto: '<p>Pacientes em terapia, mas <b>sem visita há mais de 5 dias</b> naquela terapia.</p><p>A barra vermelha mostra quem é indicado com terapias e não teve nenhuma visita em 90 dias.</p><p><b>O que fazer:</b> abra a lista e verifique a agenda com o profissional.</p>'},
       {aba: 'terapias', alvo: '#c-ter-visitas', card: true, titulo: 'Volume de visitas por terapia', texto: '<p>Total de visitas de cada terapia no período. Clique numa barra para ver as visitas.</p>'},
     ],
   },

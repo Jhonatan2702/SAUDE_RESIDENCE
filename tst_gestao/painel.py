@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 from . import operacional as op
 from .fonte import (FAIXAS_IDADE, JANELA_ATRASO, JANELA_COBERTURA, JANELA_TERAPIA, NIVEIS, NOMES_TERAPIA, TERAPIAS, Base, br, carregar, eh_monitoramento,
-                    eh_obito, em_fortaleza, faixa_idade, nivel, periodo, sem_acento, tem_terapias, chave_paciente)
+                    eh_obito, em_fortaleza, faixa_idade, nivel, periodo, sem_acento, servico_acompanhado, tem_terapias, chave_paciente)
 
 MIN_MESES, MAX_MESES = 8, 24
 LIMITE_DETALHE = 5000
@@ -92,6 +92,21 @@ class _Contexto:
                                       if any(tem_terapias(a) for a in lst) and not self.ter_janela.get(p)}
         self.monit = {p for p, lst in self.ativos.items() if any(eh_monitoramento(a) for a in lst)}
         self.monit_ter = {p for p, lst in self.ativos.items() if any(eh_monitoramento(a) and tem_terapias(a) for a in lst)}
+        # atendimento "com terapias": indicado pela URL (possui terapias = SIM) ou com alguma visita de terapia
+        self.ids_terapia = {v["atendimento_origem_id"] for v in base.visitas if v["_ter"] in TERAPIAS}
+        self.com_ter = {p for p, lst in self.ativos.items() if any(self.com_terapias(a) for a in lst)}
+        # sem visita: só pacientes de serviços acompanhados (Monitoramento, ID, Plantão, Serv. Prof. Não Méd.)
+        self.sem_visita = {p for p, lst in self.ativos.items() if any(servico_acompanhado(a) for a in lst)} - self.visitados
+
+    def com_terapias(self, a: dict) -> bool:
+        return tem_terapias(a) or a["origem_id"] in self.ids_terapia
+
+    def admissoes(self, ini: date, fim: date, so_terapias: bool = False) -> list[dict]:
+        return [a for a in self.base.atend if a["_adm"] and ini <= a["_adm"] <= fim and (not so_terapias or self.com_terapias(a))]
+
+    def altas(self, ini: date, fim: date, so_terapias: bool = False) -> list[dict]:
+        return [a for a in self.base.atend if a["_alta"] and ini <= a["_alta"] <= fim and not eh_obito(a)
+                and (not so_terapias or self.com_terapias(a))]
 
     # ---- linhas para o detalhamento
     def ultima_visita(self) -> dict[str, date]:
@@ -329,26 +344,23 @@ def gerar(ini: date | None = None, fim: date | None = None) -> dict:
     mapa = contar(conjuntos)
     conj_zonas, fora_zona = _mapa_conjuntos(base, c, por="zona")
     zonas = contar(conj_zonas)
-    orc = Counter(situacao_orcamento(a, fim) for a in c.ativos_at)
-
-    sem_visita = set(c.ativos) - c.visitados
     relatorios = base.relatorios_pendentes()
+    rel_recentes = [r for r in relatorios if op.relatorio_recente(r)]
     profs = op.resumo_profissionais(base, ini, fim)
     return {
         "periodo": {"ini": ini.isoformat(), "fim": fim.isoformat()},
         "atualizado_em": base.sincronizado,
         "janelas": {"terapia": JANELA_TERAPIA, "atraso": JANELA_ATRASO},
         "kpis": {
-            "pacientes_ativos": len(c.ativos), "atendimentos_ativos": len(c.ativos_at),
-            "admissoes": sum(1 for a in base.atend if a["_adm"] and ini <= a["_adm"] <= fim),
-            "altas": sum(1 for a in base.atend if a["_alta"] and ini <= a["_alta"] <= fim and not eh_obito(a)),
+            "pacientes_ativos": len(c.ativos), "atendimentos_ativos": len(c.ativos_at), "com_terapias": len(c.com_ter),
+            "admissoes": len(c.admissoes(ini, fim)), "admissoes_terapias": len(c.admissoes(ini, fim, True)),
+            "altas": len(c.altas(ini, fim)), "altas_terapias": len(c.altas(ini, fim, True)),
             "visitas": len(c.visitas_periodo), "pacientes_visitados": len(c.visitados & set(c.ativos)),
-            "sem_visita": len(sem_visita),
+            "sem_visita": len(c.sem_visita),
             "monit_terapias": len(c.monit_ter), "monitoramento": len(c.monit),
             "mortalidade": mort["taxa"], "obitos": mort["obitos"], "atendidos": mort["atendidos"],
             "em_terapia": total_ter, "pendentes": len(pendentes_total), "sem_atendimento_terapia": len(c.pend[SEM_ATENDIMENTO]),
-            "relatorios_pendentes": len(relatorios), "profissionais": len(profs),
-            "orcamentos_vencidos": orc.get("vencido", 0), "orcamentos_7d": orc.get("vence_7", 0),
+            "relatorios_pendentes": len(relatorios), "relatorios_recentes": len(rel_recentes), "profissionais": len(profs),
             "idade_media": round(sum(idades) / len(idades), 1) if idades else 0,
         },
         "terapias": terapias,
@@ -369,7 +381,6 @@ def gerar(ini: date | None = None, fim: date | None = None) -> dict:
         "mapa": mapa, "mapa_fora": fora,
         "zonas": zonas, "zonas_sem": fora_zona["sem_zona"],
         "zonas_info": {z: {"nome": base.zonas[z]["nome"], "bairros": base.zonas[z]["bairros"]} for z in base.zonas},
-        "orcamentos": [{"chave": k, "rotulo": r, "valor": orc.get(k, 0)} for k, r in SITUACOES_ORCAMENTO],
         "profissionais": profs[:15],
         "relatorios_terapia": _top(Counter(r["terapia"] for r in relatorios)),
     }
@@ -387,18 +398,23 @@ def detalhe(tipo: str, valor: str | None, ini: date | None = None, fim: date | N
 
     if tipo == "ativos":
         titulo, r = f"Pacientes ativos em {br(fim)}", c.linhas_pacientes(c.ativos)
+    elif tipo == "com_terapias":
+        titulo, r = f"Pacientes ativos com terapias em {br(fim)}", c.linhas_pacientes(c.com_ter)
     elif tipo == "admissoes":
-        titulo = f"Admissões ({rot})"
-        r = c.linhas_atendimentos([a for a in base.atend if a["_adm"] and ini <= a["_adm"] <= fim])
+        so_ter = valor == "terapias"
+        titulo = f"Admissões{' com terapias' if so_ter else ''} ({rot})"
+        r = c.linhas_atendimentos(c.admissoes(ini, fim, so_ter))
     elif tipo == "altas":
-        titulo = f"Altas, exceto óbitos ({rot})"
-        r = c.linhas_atendimentos([a for a in base.atend if a["_alta"] and ini <= a["_alta"] <= fim and not eh_obito(a)])
+        so_ter = valor == "terapias"
+        titulo = f"Altas{' com terapias' if so_ter else ''}, exceto óbitos ({rot})"
+        r = c.linhas_atendimentos(c.altas(ini, fim, so_ter))
     elif tipo == "obitos":
         titulo, r = f"Pacientes que foram a óbito ({rot})", c.linhas_atendimentos(_obitos(base, ini, fim))
     elif tipo == "visitas":
         titulo, r = f"Visitas ({rot})", c.linhas_visitas(c.visitas_periodo)
     elif tipo == "sem_visita":
-        titulo, r = f"Pacientes ativos sem nenhuma visita ({rot})", c.linhas_pacientes(set(c.ativos) - c.visitados)
+        titulo = f"Ativos sem nenhuma visita — Monitoramento, ID, Plantão e Serv. Prof. Não Méd. ({rot})"
+        r = c.linhas_pacientes(c.sem_visita)
     elif tipo == "monit_terapias":
         titulo, r = f"Pacientes ativos de monitoramento com terapias em {br(fim)}", c.linhas_pacientes(c.monit_ter)
     elif tipo == "monitoramento":
@@ -520,6 +536,7 @@ def detalhe(tipo: str, valor: str | None, ini: date | None = None, fim: date | N
     elif tipo == "relatorios":
         rel = [x for x in base.relatorios_pendentes() if not valor or x["terapia"] == valor]
         titulo, r = f"Relatórios pendentes{f' — {NOMES_TERAPIA.get(valor, valor)}' if valor else ''}", op.linhas_relatorios(rel)
+        r["filtros"] = op.filtros_relatorios(rel)
     elif tipo == "paciente":
         chave = chave_paciente(valor)
         lst = [a for a in base.atend if a["_pac"] == chave]
@@ -533,5 +550,8 @@ def detalhe(tipo: str, valor: str | None, ini: date | None = None, fim: date | N
         raise ValueError("Detalhamento desconhecido.")
 
     total = len(r["linhas"])
-    return {"titulo": titulo, "colunas": r["colunas"], "linhas": r["linhas"][:LIMITE_DETALHE], "drill": r.get("drill"),
-            "total": total, "truncado": total > LIMITE_DETALHE}
+    saida = {"titulo": titulo, "colunas": r["colunas"], "linhas": r["linhas"][:LIMITE_DETALHE], "drill": r.get("drill"),
+             "total": total, "truncado": total > LIMITE_DETALHE}
+    if r.get("filtros"):  # caixas de seleção do detalhe; "marcas" acompanha cada linha (1 = passa no filtro)
+        saida["filtros"] = [{**f, "marcas": f["marcas"][:LIMITE_DETALHE]} for f in r["filtros"]]
+    return saida
