@@ -2,7 +2,7 @@
 
 Para publicar uma versão nova: aumente VERSAO e rode publicar_atualizacao.bat (veja o README).
 """
-VERSAO = "2.1.1"
+VERSAO = "2.1.2"
 
 # Repositório PÚBLICO só com os executáveis (sem código-fonte e sem dados): github.com/<REPOSITORIO>/releases
 REPOSITORIO = "Jhonatan2702/tst-gestao-atualizacoes"
