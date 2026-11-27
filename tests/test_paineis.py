@@ -331,8 +331,9 @@ def test_ultimo_acesso_registra_quem_ja_estava_logado(admin, criar_usuario):
 
 def test_cards_com_terapias_e_sem_visita(admin, dados):
     k = admin.get(f"/api/painel?{P}").get_json()["kpis"]
-    # Ana e Davi têm visitas de terapia; Bruno é indicado com terapias pela URL
-    assert (k["pacientes_ativos"], k["com_terapias"]) == (3, 3)
+    # só conta o cadastro da URL (possui terapias = SIM) em serviço acompanhado: Bruno.
+    # Ana e Davi têm visitas de terapia, mas não estão cadastrados com terapias
+    assert (k["pacientes_ativos"], k["com_terapias"]) == (3, 1)
     # a única admissão de outubro (Ana, Visita Médica) não tem terapias: fica só na observação
     assert (k["admissoes"], k["admissoes_terapias"], k["altas_terapias"]) == (1, 0, 0)
     r = admin.get(f"/api/painel/detalhe?tipo=admissoes&valor=terapias&{P}").get_json()

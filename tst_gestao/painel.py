@@ -94,7 +94,8 @@ class _Contexto:
         self.monit_ter = {p for p, lst in self.ativos.items() if any(eh_monitoramento(a) and tem_terapias(a) for a in lst)}
         # atendimento "com terapias": indicado pela URL (possui terapias = SIM) ou com alguma visita de terapia
         self.ids_terapia = {v["atendimento_origem_id"] for v in base.visitas if v["_ter"] in TERAPIAS}
-        self.com_ter = {p for p, lst in self.ativos.items() if any(self.com_terapias(a) for a in lst)}
+        # card "Pacientes com terapias": cadastro da URL (possui terapias = SIM) num serviço acompanhado
+        self.com_ter = {p for p, lst in self.ativos.items() if any(tem_terapias(a) and servico_acompanhado(a) for a in lst)}
         # sem visita: só pacientes de serviços acompanhados (Monitoramento, ID, Plantão, Serv. Prof. Não Méd.)
         self.sem_visita = {p for p, lst in self.ativos.items() if any(servico_acompanhado(a) for a in lst)} - self.visitados
 

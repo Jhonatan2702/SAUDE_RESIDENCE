@@ -44,7 +44,7 @@
       {tom: 'acc', icone: 'ativos', rotulo: 'Pacientes ativos', valor: fmt(k.pacientes_ativos), det: 'ativos',
         sub: `<b>${fmt(k.atendimentos_ativos)}</b> atendimentos ativos`, info: 'Pessoas distintas com ao menos um atendimento sem alta na data final do período. Um paciente pode ter mais de um atendimento (serviços diferentes).'},
       {tom: 'acc', icone: 'terapias', rotulo: 'Pacientes com terapias', valor: fmt(k.com_terapias), det: 'com_terapias',
-        sub: `de <b>${fmt(k.pacientes_ativos)}</b> pacientes ativos`, info: 'Pacientes ativos com ao menos um atendimento ativo indicado com terapias pela URL (possui terapias = SIM) ou com visita de Fisio, Fono, TO, Nutri ou Psico.'},
+        sub: `de <b>${fmt(k.pacientes_ativos)}</b> pacientes ativos`, info: 'Pacientes ativos com ao menos um atendimento ativo cadastrado com terapias na URL (possui terapias = SIM) nos serviços Monitoramento, Internação Domiciliar, Plantão ou Serv. Prof. Não Méd.'},
       {tom: 'acc', icone: 'terapias', rotulo: 'Monitoramento com terapias', valor: fmt(k.monit_terapias), det: 'monit_terapias',
         sub: `de <b>${fmt(k.monitoramento)}</b> pacientes em monitoramento`, info: 'Pacientes ativos no serviço Monitoramento que a URL indica com terapias (possui terapias = SIM).'},
       {tom: 'crit', icone: 'mortalidade', rotulo: 'Mortalidade', valor: fmtPct(k.mortalidade), det: 'obitos',
